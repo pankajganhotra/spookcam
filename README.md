@@ -107,4 +107,9 @@ the extension makes no network requests besides loading its own bundled files.
 
 ## Credits
 
-Face and segmentation models and the canonical face mesh: [MediaPipe](https://github.com/google-ai-edge/mediapipe) (Apache-2.0).
+Face, hand and segmentation models and the canonical face mesh: [MediaPipe](https://github.com/google-ai-edge/mediapipe) (Apache-2.0).
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## License
+
+[MIT](LICENSE) © 2026 Pankaj Ganhotra

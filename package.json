@@ -13,6 +13,8 @@
     "postinstall": "node scripts/fetch-assets.mjs"
   },
   "license": "MIT",
+  "author": "Pankaj Ganhotra",
+  "repository": { "type": "git", "url": "https://github.com/pankajganhotra/spookcam.git" },
   "devDependencies": {
     "@types/chrome": "^0.3.7",
     "esbuild": "^0.28.2",
