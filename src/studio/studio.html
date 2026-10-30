@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SpookCam Studio</title>
+    <link rel="icon" href="icons/icon32.png" />
+    <link rel="stylesheet" href="studio.css" />
+  </head>
+  <body>
+    <header class="studio-head">
+      <h1 class="wordmark">SpookCam</h1>
+      <p class="hint">Preview every effect here. It all carries over to Meet, Zoom, Teams, Discord and any site that uses your camera.</p>
+      <div id="master"></div>
+    </header>
+
+    <section class="welcome" id="welcome" hidden>
+      <h2 class="section-title">You're set up</h2>
+      <ol>
+        <li><strong>Turn on your camera</strong> below and pick a face or a preset.</li>
+        <li><strong>Step out of frame for a second</strong> so SpookCam can learn the room behind you — that's what makes vanishing look real.</li>
+        <li><strong>Press Snap</strong> (or <kbd>Alt</kbd> <kbd>⇧</kbd> <kbd>S</kbd> during any call) and turn to dust. Press again to come back.</li>
+      </ol>
+      <p class="hint">Already in a call? Turn your camera off and on once so SpookCam can attach to it.</p>
+      <button class="btn" id="dismiss" type="button">Got it</button>
+    </section>
+
+    <main class="studio">
+      <div class="stage-col">
+        <div class="stage" id="stage">
+          <video id="preview" playsinline muted></video>
+          <div class="stage-empty" id="empty">
+            <p class="empty-title">Your reflection is waiting</p>
+            <button class="btn btn-primary" id="start" type="button">Turn on camera</button>
+            <p class="hint" id="camError"></p>
+          </div>
+          <span class="rec" id="recBadge" hidden>REC</span>
+        </div>
+        <div class="stage-bar">
+          <select id="camera" aria-label="Camera"></select>
+          <label class="switch"><input type="checkbox" id="mirror" checked /><span class="track" aria-hidden="true"></span><span>Mirror preview</span></label>
+          <span class="spacer"></span>
+          <button class="btn" id="photo" type="button" disabled>Save photo</button>
+          <button class="btn" id="record" type="button" disabled>Record clip</button>
+        </div>
+      </div>
+      <aside class="panel" id="controls"></aside>
+    </main>
+    <script type="module" src="studio.js"></script>
+  </body>
+</html>

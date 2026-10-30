@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>SpookCam test call</title></head>
+  <body style="margin:0;background:#000">
+    <video id="v" autoplay playsinline muted style="width:640px;height:480px;display:block"></video>
+    <script>
+      window.ready = (async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+        const v = document.getElementById('v');
+        v.srcObject = stream;
+        await v.play();
+        window.track = stream.getVideoTracks()[0];
+        return { label: window.track.label, settings: window.track.getSettings(), ctor: window.track.constructor.name };
+      })();
+      window.grab = () => {
+        const v = document.getElementById('v');
+        const c = document.createElement('canvas');
+        c.width = v.videoWidth;
+        c.height = v.videoHeight;
+        c.getContext('2d').drawImage(v, 0, 0);
+        return c.toDataURL('image/jpeg', 0.9);
+      };
+    </script>
+  </body>
+</html>

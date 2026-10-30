@@ -1,20 +1,27 @@
 {
   "name": "spookcam",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "SpookCam — Halloween webcam effects Chrome extension",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "fetch-assets": "node scripts/fetch-assets.mjs",
+    "gen-facemesh": "node scripts/gen-facemesh.mjs",
+    "icons": "node scripts/icons.mjs",
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "typecheck": "tsc -p .",
+    "test": "node test/e2e.mjs",
+    "postinstall": "node scripts/fetch-assets.mjs"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
     "@types/chrome": "^0.3.7",
     "esbuild": "^0.28.2",
+    "puppeteer": "^25.16.0",
     "typescript": "^7.0.2"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.2.0"
-  }
+  },
+  "private": true,
+  "type": "module"
 }

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="seal" cx="38%" cy="32%" r="75%">
+      <stop offset="0" stop-color="#ffd690"/>
+      <stop offset="0.4" stop-color="#f4a93b"/>
+      <stop offset="0.8" stop-color="#c46a12"/>
+      <stop offset="1" stop-color="#7a3a08"/>
+    </radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="#1a0f22"/>
+  <circle cx="64" cy="64" r="52" fill="url(#seal)"/>
+  <!-- skull: cranium + jaw, eye sockets, nasal cavity -->
+  <path d="M64 26c-19 0-32 13-32 30 0 10 5 17 11 21v9c0 3 2 5 5 5h32c3 0 5-2 5-5v-9c6-4 11-11 11-21 0-17-13-30-32-30z" fill="#2a1206"/>
+  <ellipse cx="51" cy="58" rx="9" ry="10" fill="#f4a93b"/>
+  <ellipse cx="77" cy="58" rx="9" ry="10" fill="#f4a93b"/>
+  <path d="M64 66l-5 9h10z" fill="#f4a93b"/>
+  <path d="M53 84v8M59 84v8M65 84v8M71 84v8" stroke="#f4a93b" stroke-width="3" stroke-linecap="round"/>
+  <!-- dust drifting off the right side -->
+  <circle cx="100" cy="44" r="3.2" fill="#2a1206"/>
+  <circle cx="106" cy="36" r="2.4" fill="#2a1206"/>
+  <circle cx="98" cy="30" r="1.8" fill="#2a1206"/>
+  <circle cx="108" cy="50" r="1.6" fill="#2a1206"/>
+</svg>
