@@ -1,7 +1,7 @@
 // Random "hallucinations": short, scary distortions that strike at unpredictable times.
 // The director only decides *when* and *how much*; the composite/post shaders do the warping.
 
-export type HallucinationKind = 'jaw' | 'eyes' | 'melt' | 'twitch' | 'echo' | 'figure' | 'flash';
+export type HallucinationKind = 'jaw' | 'eyes' | 'melt' | 'twitch' | 'echo' | 'figure' | 'flash' | 'jumpscare';
 
 interface Event {
   kind: HallucinationKind;
@@ -21,12 +21,17 @@ export interface HallucinationState {
   jerk: [number, number];
   /** Shadow figure: x position (uv), opacity, height scale. */
   figure: [number, number, number];
+  /** Jump scare: zoom into the face (0..1), black void eyes/mouth + pallor, lights out, camera shake (uv). */
+  zoom: number;
+  voids: number;
+  blackout: number;
+  shake: [number, number];
   /** Anything warping the body (needs the clean background behind it). */
   active: boolean;
 }
 
-const DURATION: Record<HallucinationKind, number> = { jaw: 2.4, eyes: 2.2, melt: 2.8, twitch: 0.9, echo: 3.2, figure: 6, flash: 0.22 };
-const WEIGHT: Record<HallucinationKind, number> = { jaw: 3, eyes: 2, melt: 2, twitch: 3, echo: 2, figure: 2, flash: 1.5 };
+const DURATION: Record<HallucinationKind, number> = { jaw: 2.4, eyes: 2.2, melt: 2.8, twitch: 0.9, echo: 3.2, figure: 6, flash: 0.22, jumpscare: 1.5 };
+const WEIGHT: Record<HallucinationKind, number> = { jaw: 3, eyes: 2, melt: 2, twitch: 3, echo: 2, figure: 2, flash: 1.5, jumpscare: 1.5 };
 
 const rand = (seed: number) => {
   const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
@@ -59,12 +64,9 @@ export class Hallucinations {
     this.nextAt = nowSec + (4 + 10 * Math.random()) / (0.35 + intensity);
   }
 
-  /** "Scare now": a guaranteed, layered jump scare. */
+  /** "Scare now": your own face lunges at the camera. */
   scare(nowSec: number) {
-    this.spawn(nowSec, 'flash');
-    this.spawn(nowSec, Math.random() < 0.5 ? 'jaw' : 'eyes');
-    this.spawn(nowSec + 0.05, 'twitch');
-    if (Math.random() < 0.5) this.spawn(nowSec, 'figure');
+    this.spawn(nowSec, 'jumpscare');
   }
 
   private pick(): HallucinationKind {
@@ -81,7 +83,7 @@ export class Hallucinations {
   }
 
   state(nowSec: number): HallucinationState {
-    const s: HallucinationState = { jaw: 0, eyes: 0, melt: 0, echo: 0, flash: 0, jerk: [0, 0], figure: [0, 0, 1], active: false };
+    const s: HallucinationState = { jaw: 0, eyes: 0, melt: 0, echo: 0, flash: 0, jerk: [0, 0], figure: [0, 0, 1], zoom: 0, voids: 0, blackout: 0, shake: [0, 0], active: false };
     for (const e of this.events) {
       const p = (nowSec - e.start) / e.dur;
       if (p < 0 || p > 1) continue;
@@ -108,6 +110,21 @@ export class Hallucinations {
           s.jerk = [(rand(e.seed * 31 + step) - 0.5) * 2 * amp, (rand(e.seed * 17 + step) - 0.5) * 1.2 * amp];
           break;
         }
+        case 'jumpscare': {
+          const t = nowSec - e.start;
+          // 0–0.1 s lights out · 0.1–0.28 s lunge · hold and shudder · 1.0–1.25 s snap back · flicker.
+          const lunge = smooth(0.1, 0.28, t) * (1 - smooth(1.0, 1.25, t));
+          s.blackout = Math.max(s.blackout, t < 0.1 ? 1 : t > 1.27 && t < 1.34 ? 0.85 : 0);
+          s.zoom = Math.max(s.zoom, lunge);
+          s.voids = Math.max(s.voids, lunge);
+          s.jaw = Math.max(s.jaw, 1.5 * lunge);
+          s.eyes = Math.max(s.eyes, 0.6 * lunge);
+          if (t > 0.1 && t < 0.16) s.flash = Math.max(s.flash, 1);
+          const step = Math.floor(t / 0.03);
+          const amp = 0.018 * lunge;
+          s.shake = [(rand(e.seed * 13 + step) - 0.5) * 2 * amp, (rand(e.seed * 29 + step) - 0.5) * 2 * amp];
+          break;
+        }
         case 'figure': {
           const side = rand(e.seed) < 0.5 ? -1 : 1;
           const x = 0.5 + side * (0.24 + 0.16 * rand(e.seed + 3));
@@ -117,7 +134,7 @@ export class Hallucinations {
         }
       }
     }
-    s.active = s.jaw > 0 || s.eyes > 0 || s.melt > 0 || s.echo > 0 || s.jerk[0] !== 0 || s.figure[1] > 0;
+    s.active = s.jaw > 0 || s.eyes > 0 || s.melt > 0 || s.echo > 0 || s.jerk[0] !== 0 || s.figure[1] > 0 || s.zoom > 0 || s.blackout > 0;
     return s;
   }
 }

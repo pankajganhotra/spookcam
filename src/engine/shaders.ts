@@ -151,7 +151,8 @@ uniform vec2 uMaskTexel;
 // Hallucinations
 uniform bool uWarp;
 uniform vec2 uRes, uJerk, uMouth, uEyeL, uEyeR, uFaceC, uDown;
-uniform float uFaceS, uJaw, uBulge, uMelt, uEcho;
+uniform float uFaceS, uJaw, uBulge, uMelt, uEcho, uZoom, uVoid;
+uniform vec2 uShake;
 uniform vec3 uFigure; // x (uv), opacity, scale
 uniform sampler2D uEchoTex;
 out vec4 o;
@@ -333,9 +334,22 @@ vec3 ghostly(vec2 uv, float m) {
 
 void main() {
   vec2 uv = vUv;
+  // Jump scare: the camera lunges into the face.
+  if (uZoom > 0.0) uv = uFaceC + (vUv - uFaceC) / (1.0 + 1.7 * uZoom) + uShake;
   vec2 puv = warpUv(uv);
   vec4 person = texture(uPerson, puv);
   float m = personMask(puv);
+  if (uVoid > 0.0) {
+    // Hollow black eyes and mouth (in source space, so the jaw stretch drags the void with it), deathly pallor.
+    vec2 pp = puv * uRes;
+    float S = max(uFaceS, 1.0);
+    float eyes = min(length(pp - uEyeL * uRes), length(pp - uEyeR * uRes)) / (S * 0.07);
+    float mouth = length((pp - uMouth * uRes) / vec2(S * 0.12, S * 0.05));
+    float hole = max(smoothstep(1.2, 0.55, eyes), smoothstep(1.1, 0.6, mouth));
+    vec3 pale = vec3(luma(person.rgb)) * vec3(0.82, 0.88, 1.0) * 1.2;
+    person.rgb = mix(person.rgb, pale, uVoid * 0.8);
+    person.rgb = mix(person.rgb, vec3(0.0), uVoid * hole);
+  }
 
   vec3 bg;
   if (uBackdrop == 1) bg = graveyard(uv);
@@ -451,7 +465,7 @@ ${COMMON}
 in vec2 vUv;
 uniform sampler2D uTex;
 uniform int uTint;
-uniform float uTime, uVignette, uGrain, uFlicker, uGlitch, uFog, uAspect, uFlash;
+uniform float uTime, uVignette, uGrain, uFlicker, uGlitch, uFog, uAspect, uFlash, uBlackout;
 uniform vec2 uRes;
 out vec4 o;
 void main() {
@@ -503,6 +517,7 @@ void main() {
     vec3 neg = vec3(1.0) - c;
     c = mix(c, vec3(neg.r * 1.3, neg.g * 0.25, neg.b * 0.2), smoothstep(0.0, 0.3, uFlash));
   }
+  c *= 1.0 - uBlackout;
   o = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
 `;

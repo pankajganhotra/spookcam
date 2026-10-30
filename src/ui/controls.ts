@@ -215,7 +215,7 @@ export async function mountControls(opts: ControlsOptions) {
         'div',
         { class: 'stack' },
         slider('How often', () => settings.hallucinate, (hallucinate) => update({ hallucinate }, true), { fmt: (v) => (v ? `${Math.round(v * 100)}` : 'off') }),
-        h('p', { class: 'hint', style: 'margin:0' }, 'Your jaw stretches, eyes bulge, face melts, you twitch, a lagging double follows you, or a figure appears behind you.'),
+        h('p', { class: 'hint', style: 'margin:0' }, 'Your jaw stretches, eyes bulge, face melts, you twitch, a lagging double follows you, a figure appears behind you — or your own face lunges at the camera.'),
       ),
     ),
     section(

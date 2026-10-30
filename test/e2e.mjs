@@ -171,7 +171,7 @@ try {
   };
   await setSettings({ face: 'possessed', backdrop: 'void' });
   await wait(1200);
-  for (const [kind, ms] of [['jaw', 700], ['eyes', 600], ['melt', 1300], ['twitch', 250], ['echo', 1200], ['figure', 3000], ['flash', 60]]) {
+  for (const [kind, ms] of [['jumpscare', 450], ['jaw', 700], ['eyes', 600], ['melt', 1300], ['twitch', 250], ['echo', 1200], ['figure', 3000], ['flash', 60]]) {
     await forceIt({ hallucination: kind });
     await consumed();
     await wait(ms);

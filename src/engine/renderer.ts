@@ -450,6 +450,7 @@ export class Renderer {
       uAspect: w / h,
       uRes: res,
       uFlash: hall?.flash ?? 0,
+      uBlackout: hall?.blackout ?? 0,
     });
     gl.uniform1i(this.p.post.uniforms.get('uTint')!, TINT_IDS[s.tint]);
     this.quad();
@@ -463,9 +464,12 @@ export class Renderer {
   }
 
   private hallucinationUniforms(hall: HallucinationState | undefined, lm: Float32Array | undefined, res: [number, number]) {
-    const off = { uWarp: false, uJaw: 0, uBulge: 0, uMelt: 0, uEcho: 0, uJerk: [0, 0], uFigure: [0, 0, 1], uRes: res, uEchoTex: { tex: this.echo!.tex, unit: 3 } };
+    const off = {
+      uWarp: false, uJaw: 0, uBulge: 0, uMelt: 0, uEcho: 0, uJerk: [0, 0], uFigure: [0, 0, 1], uRes: res,
+      uEchoTex: { tex: this.echo!.tex, unit: 3 }, uZoom: 0, uVoid: 0, uShake: [0, 0], uFaceC: [0.5, 0.42],
+    };
     if (!hall || (!hall.active && !hall.flash)) return off;
-    const out = { ...off, uWarp: true, uJerk: hall.jerk, uEcho: hall.echo, uFigure: hall.figure };
+    const out = { ...off, uWarp: true, uJerk: hall.jerk, uEcho: hall.echo, uFigure: hall.figure, uZoom: hall.zoom, uShake: hall.shake };
     const f = lm && faceFrame(lm, res);
     if (!f || !lm) return out;
     const P = (i: number) => [lm[i * 2], lm[i * 2 + 1]];
@@ -474,10 +478,11 @@ export class Renderer {
       uJaw: hall.jaw,
       uBulge: hall.eyes,
       uMelt: hall.melt,
+      uVoid: hall.voids,
       uMouth: [(lm[26] + lm[28]) / 2, (lm[27] + lm[29]) / 2], // between landmarks 13 and 14
       uEyeL: P(468),
       uEyeR: P(473),
-      uFaceC: P(1),
+      uFaceC: P(6), // bridge of the nose: zoom and melt centre
       uDown: [-f.up[0], -f.up[1]],
       uFaceS: f.faceH,
     };
