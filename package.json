@@ -7,6 +7,7 @@
     "gen-facemesh": "node scripts/gen-facemesh.mjs",
     "icons": "node scripts/icons.mjs",
     "build": "node scripts/build.mjs",
+    "package": "node scripts/package.mjs",
     "dev": "node scripts/build.mjs --watch",
     "typecheck": "tsc -p .",
     "test": "node test/snap-unit.mjs && node test/sfx-test.mjs && node test/e2e.mjs && node test/hands-e2e.mjs && node test/call-sound-e2e.mjs",

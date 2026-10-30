@@ -7,3 +7,4 @@ test/out/
 *.y4m
 .DS_Store
 src/engine/vendor/
+release/

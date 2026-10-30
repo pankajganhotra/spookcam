@@ -36,17 +36,30 @@ uses the camera — Google Meet, Zoom (web), Teams, Discord, Whereby, or your ow
 - **Presets** for one-click looks, a **preview studio** with photo and clip recording, and a
   keyboard shortcut: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> snaps from any tab.
 
-## Install (unpacked)
+## Install
+
+### From a release (no build tools needed)
+
+1. Download `spookcam-vX.Y.Z.zip` from the [latest release](https://github.com/pankajganhotra/spookcam/releases/latest)
+   and unzip it into a folder you'll keep (Chrome loads the extension from there).
+2. Open `chrome://extensions` and turn on **Developer mode** (top right).
+3. Click **Load unpacked** and choose the unzipped folder (the one containing `manifest.json`).
+4. The studio opens — turn on the camera and try the effects. In a call that's already running,
+   turn your camera off and on once so SpookCam can attach to it.
+
+To update, unzip the new release over the same folder and click the reload icon on SpookCam in
+`chrome://extensions` (or open `chrome-extension://<extension id>/reload.html`).
+
+### From source
 
 ```bash
 npm install          # also downloads the MediaPipe models (postinstall)
-npm run build        # → dist/
+npm run build        # → dist/   (load this folder unpacked, as above)
+npm run package      # → release/spookcam-v<version>.zip
 ```
 
-1. Open `chrome://extensions` and turn on **Developer mode** (top right).
-2. Click **Load unpacked** and choose the `dist/` folder.
-3. The studio opens — turn on the camera and try the effects. In a call that's already running,
-   turn your camera off and on once so SpookCam can attach to it.
+Releases are built by GitHub Actions: push a tag matching the manifest version (e.g. `v1.0.0`)
+and the zip is attached to the release automatically.
 
 **Tip for a clean vanish:** step out of frame for a second (or sway side to side). SpookCam keeps
 learning the room behind you; the popup's meter shows how much of it is known.
