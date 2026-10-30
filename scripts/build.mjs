@@ -27,7 +27,7 @@ async function copyStatic() {
   await cp(resolve(root, 'node_modules/@mediapipe/tasks-vision/wasm/vision_wasm_internal.wasm'), resolve(dist, 'wasm/vision.wasm'));
   await cp(resolve(root, 'public'), dist, { recursive: true });
   await cp(resolve(root, 'manifest.json'), resolve(dist, 'manifest.json'));
-  for (const page of ['popup', 'studio', 'detector']) {
+  for (const page of ['popup', 'studio', 'detector', 'reload']) {
     await cp(resolve(root, `src/${page}/${page}.html`), resolve(dist, `${page}.html`));
   }
   for (const m of ['face_landmarker.task', 'selfie_segmenter.tflite', 'hand_landmarker.task']) {
@@ -50,7 +50,7 @@ const common = {
 const builds = [
   { entryPoints: { hook: 'src/content/hook.ts', bridge: 'src/content/bridge.ts', engine: 'src/engine/main.ts' }, format: 'iife' },
   { entryPoints: { background: 'src/background.ts' }, format: 'esm' },
-  { entryPoints: { popup: 'src/popup/popup.ts', studio: 'src/studio/studio.ts', detector: 'src/detector/detector.ts' }, format: 'esm', loader: { '.css': 'css' } },
+  { entryPoints: { popup: 'src/popup/popup.ts', studio: 'src/studio/studio.ts', detector: 'src/detector/detector.ts', reload: 'src/reload/reload.ts' }, format: 'esm', loader: { '.css': 'css' } },
 ];
 
 await rm(dist, { recursive: true, force: true });
