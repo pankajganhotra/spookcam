@@ -4,6 +4,7 @@ import { OneEuro } from './gl';
 import { Hallucinations, type HallucinationKind } from './hallucinations';
 import { buildClaws, Magic } from './magic';
 import { Renderer } from './renderer';
+import { Sfx, type SfxKind } from './sfx';
 import { SnapDetector } from './snap-detector';
 
 const PARTICLE_LIFE = 2.6;
@@ -40,10 +41,16 @@ export class SpookEngine {
   private listening: NonNullable<EngineStatus['listening']> = 'off';
   private heardSnapAt?: number;
   private listenGeneration = 0;
+  private audioCtx?: AudioContext;
+  private sfx?: Sfx;
+  /** Gain feeding the outgoing call microphone mix (0 unless sounds === 'call'). */
+  private callSend?: GainNode;
+  private callBus?: AudioNode;
 
   constructor(detectors: DetectorBackend, settings: Settings, onStatus?: (s: EngineStatus) => void) {
     this.settings = settings;
     this.detectors = detectors;
+    this.hall.onSpawn = (kind) => this.sound(kind);
     if (onStatus) this.statusTimer = setInterval(() => onStatus(this.status()), 500);
     this.warmUp();
   }
@@ -53,6 +60,35 @@ export class SpookEngine {
     if (!s.enabled) this.timeline = { from: 0, dir: 0, start: 0 };
     this.warmUp();
     this.syncListening();
+  }
+
+  /** Routes scare sounds into the outgoing call microphone (set up by the page hook). */
+  setCallMixer(ctx: AudioContext, bus: AudioNode) {
+    this.sfx?.bus.disconnect();
+    this.sfx = undefined;
+    this.audioCtx = ctx;
+    this.callBus = bus;
+  }
+
+  private sound(kind: SfxKind) {
+    const s = this.settings;
+    if (!s.enabled || s.sounds === 'off' || this.pipelines.size === 0) return;
+    try {
+      if (!this.sfx) {
+        const ctx = (this.audioCtx ??= new AudioContext());
+        this.sfx = new Sfx(ctx);
+        this.sfx.bus.connect(ctx.destination);
+        if (this.callBus) {
+          this.callSend = ctx.createGain();
+          this.sfx.bus.connect(this.callSend).connect(this.callBus);
+        }
+      }
+      this.sfx.volume = s.soundVolume;
+      if (this.callSend) this.callSend.gain.value = s.sounds === 'call' ? 1 : 0;
+      this.sfx.play(kind);
+    } catch (err) {
+      console.warn('[SpookCam] sound failed', err);
+    }
   }
 
   /** (Re)sets where the microphone comes from; restarts any running listener. */
@@ -112,7 +148,7 @@ export class SpookEngine {
   private warmUp() {
     if (!this.settings.enabled) return;
     const s = this.settings;
-    this.detectors.warm({ mask: true, face: s.face !== 'none' || s.magic || s.hallucinate > 0, hands: s.magic || s.claws });
+    this.detectors.warm({ mask: true, face: s.face !== 'none' || s.magic || s.hallucinate > 0, hands: s.magic || s.claws || s.backdrop !== 'none' || s.ghost });
   }
 
   get life() {
@@ -141,6 +177,7 @@ export class SpookEngine {
     const go = (dir: 1 | -1) => {
       const from = this.vanishT(now);
       if (dir > 0 && from === 0) this.snapGeneration++;
+      this.sound(dir > 0 ? 'vanish' : 'return');
       this.timeline = { from, dir, start: now };
     };
     switch (cmd) {
@@ -274,7 +311,8 @@ class Pipeline {
     this.engine.tick(now);
     const t = this.engine.vanishT(now);
     const haunted = s.hallucinate > 0;
-    const needHands = s.magic || s.claws;
+    // Hands are also tracked whenever the background is replaced, to keep them in the person mask.
+    const needHands = s.magic || s.claws || s.backdrop !== 'none' || s.ghost;
     const needFace = s.face !== 'none' || s.magic || haunted;
     const needMask = s.backdrop !== 'none' || s.ghost || t > 0 || haunted;
     const graded = s.tint !== 'none' || s.vignette > 0 || s.grain > 0 || s.flicker > 0 || s.glitch > 0 || s.fog > 0;
@@ -300,15 +338,14 @@ class Pipeline {
         this.pendingReset = false;
       }
       const found = this.engine.detectors.detect(frame, { face: needFace && active, mask: needMask || learn, hands: needHands && active, maxFaces: s.multiFace ? 3 : 1 });
-      if (found.mask) {
-        r.updateMask(found.mask);
-        r.learnPlate();
-      }
+      const res: [number, number] = [frame.displayWidth, frame.displayHeight];
+      const hands = needHands ? this.trackHands(found.hands, res[0], now) : [];
+      if (found.mask) r.updateMask(found.mask);
+      r.stampHands(hands, res[0], res[1]);
+      if (found.mask) r.learnPlate();
       if (!active) return null;
 
-      const res: [number, number] = [frame.displayWidth, frame.displayHeight];
       const { faces, blend } = needFace ? this.trackFaces(found.faces, found.blend, res[0], now) : { faces: [], blend: [] };
-      const hands = needHands ? this.trackHands(found.hands, res[0], now) : [];
       const dt = this.lastFrameAt ? (now - this.lastFrameAt) / 1000 : 1 / 30;
       this.lastFrameAt = now;
       const f = force();

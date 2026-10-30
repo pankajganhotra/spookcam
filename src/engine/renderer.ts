@@ -16,6 +16,17 @@ const TINT_IDS: Record<Settings['tint'], number> = { none: 0, blood: 1, sickly: 
 const STYLE_IDS: Record<Settings['vanishStyle'], number> = { dust: 0, embers: 1, cloak: 2 };
 const WIND: Record<Settings['wind'], [number, number]> = { right: [0.94, -0.34], left: [-0.94, -0.34], up: [0.15, -0.99] };
 
+/** Hand skeleton as (from, to, radius as a fraction of wrist→middle-knuckle length). */
+const HAND_BONES: [number, number, number][] = [
+  [0, 1, 0.2], [1, 2, 0.14], [2, 3, 0.12], [3, 4, 0.1],
+  [5, 6, 0.11], [6, 7, 0.1], [7, 8, 0.09],
+  [9, 10, 0.11], [10, 11, 0.1], [11, 12, 0.09],
+  [13, 14, 0.1], [14, 15, 0.09], [15, 16, 0.085],
+  [17, 18, 0.095], [18, 19, 0.085], [19, 20, 0.08],
+  // Palm: wrist to knuckles and across the knuckles, fat enough to fill it.
+  [0, 5, 0.24], [0, 9, 0.26], [0, 13, 0.24], [0, 17, 0.22], [5, 9, 0.15], [9, 13, 0.15], [13, 17, 0.15],
+];
+
 /** Landmarks sampled to measure how bright skin currently is: cheeks, forehead, nose bridge, chin. */
 const SKIN_POINTS = [50, 280, 151, 6, 199];
 
@@ -49,7 +60,7 @@ export class Renderer {
   private width = 0;
   private height = 0;
 
-  private p!: Record<'copy' | 'mask' | 'plate' | 'coverage' | 'face' | 'eye' | 'mouth' | 'halo' | 'acc' | 'echo' | 'sprite' | 'flame' | 'light' | 'composite' | 'particle' | 'post', Program>;
+  private p!: Record<'copy' | 'mask' | 'plate' | 'coverage' | 'face' | 'eye' | 'mouth' | 'halo' | 'acc' | 'echo' | 'handmask' | 'sprite' | 'flame' | 'light' | 'composite' | 'particle' | 'post', Program>;
   private camTex!: WebGLTexture;
   private rawMaskTex!: WebGLTexture;
   private maskSize = [0, 0];
@@ -73,6 +84,9 @@ export class Renderer {
   private flameVao!: WebGLVertexArrayObject;
   private flameBuf!: WebGLBuffer;
   private echo?: Target;
+  private handVao!: WebGLVertexArrayObject;
+  private handBuf!: WebGLBuffer;
+  private handPts = new Float32Array(2 * 600 * 3);
   private echoFrame = 0;
   private emptyVao!: WebGLVertexArrayObject;
   private coverageTarget!: Target;
@@ -128,6 +142,7 @@ export class Renderer {
       halo: createProgram(gl, F.HALO_VS, F.HALO_FS, 'halo'),
       acc: createProgram(gl, F.ACC_VS, F.ACC_FS, 'acc'),
       echo: createProgram(gl, q, S.ECHO_FS, 'echo'),
+      handmask: createProgram(gl, S.HANDMASK_VS, S.HANDMASK_FS, 'handmask'),
       sprite: createProgram(gl, M.SPRITE_VS, M.SPRITE_FS, 'sprite'),
       flame: createProgram(gl, M.FLAME_VS, M.FLAME_FS, 'flame'),
       light: createProgram(gl, q, M.LIGHT_FS, 'light'),
@@ -211,6 +226,16 @@ export class Renderer {
       gl.vertexAttribPointer(attr(this.p.sprite, name), size, gl.FLOAT, false, 28, offset);
     }
 
+    this.handVao = gl.createVertexArray()!;
+    gl.bindVertexArray(this.handVao);
+    this.handBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.handBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, this.handPts.byteLength, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(attr(this.p.handmask, 'aPos'));
+    gl.vertexAttribPointer(attr(this.p.handmask, 'aPos'), 2, gl.FLOAT, false, 12, 0);
+    gl.enableVertexAttribArray(attr(this.p.handmask, 'aSize'));
+    gl.vertexAttribPointer(attr(this.p.handmask, 'aSize'), 1, gl.FLOAT, false, 12, 8);
+
     this.flameVao = gl.createVertexArray()!;
     gl.bindVertexArray(this.flameVao);
     this.flameBuf = gl.createBuffer()!;
@@ -284,6 +309,47 @@ export class Renderer {
     this.quad();
     this.mask = [next, prev];
     this.hasMask = true;
+  }
+
+  /**
+   * Segmentation often misses raised hands. Stamp tracked hands (palm + every finger bone) into
+   * the person mask so they stay visible over backdrops and never get learned as background.
+   */
+  stampHands(hands: Float32Array[], frameW: number, frameH: number) {
+    if (!this.hasMask || !hands.length) return;
+    const gl = this.gl;
+    const [mw] = this.maskSize;
+    const scale = mw / frameW;
+    const pts = this.handPts;
+    let k = 0;
+    const push = (x: number, y: number, rPx: number) => {
+      if (k + 3 > pts.length) return;
+      pts[k++] = x;
+      pts[k++] = y;
+      pts[k++] = Math.max(2, rPx * 2 * scale);
+    };
+    for (const h of hands) {
+      const P = (i: number) => [h[i * 2], h[i * 2 + 1]] as const;
+      const hs = Math.hypot((h[0] - h[18]) * frameW, (h[1] - h[19]) * frameH); // wrist → middle knuckle
+      for (const [a, b, r] of HAND_BONES) {
+        const [ax, ay] = P(a), [bx, by] = P(b);
+        const rad = hs * r;
+        const len = Math.hypot((bx - ax) * frameW, (by - ay) * frameH);
+        const n = Math.max(2, Math.ceil(len / (rad * 0.6)));
+        for (let j = 0; j <= n; j++) push(ax + ((bx - ax) * j) / n, ay + ((by - ay) * j) / n, rad);
+      }
+    }
+    gl.bindVertexArray(this.handVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.handBuf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, pts, 0, k);
+    bindTarget(gl, this.mask[0]!);
+    gl.enable(gl.BLEND);
+    gl.blendEquation(gl.MAX);
+    gl.blendFunc(gl.ONE, gl.ONE);
+    use(gl, this.p.handmask, {});
+    gl.drawArrays(gl.POINTS, 0, k / 3);
+    gl.blendEquation(gl.FUNC_ADD);
+    gl.disable(gl.BLEND);
   }
 
   /** Accumulates background pixels (where nobody stands) into the clean plate. */
@@ -510,7 +576,6 @@ export class Renderer {
     };
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     sprites(m.smoke, m.smokeCount, true);
-    this.drawProps(m.candles.map((data) => ({ kind: PROP.candle, color: [0, 0, 0], mode: 'strip', data, count: 4, layer: 'front' })), 'front', light);
     gl.blendFunc(gl.ONE, gl.ONE);
     for (const f of m.flames) {
       // Candle flames sit above their point; fireballs are centred on it.

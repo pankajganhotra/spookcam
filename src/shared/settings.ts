@@ -77,6 +77,9 @@ export interface Settings {
   magic: boolean;
   /** Curved talons on every fingertip. */
   claws: boolean;
+  /** Scare sound effects: off, played on your speakers, or also mixed into your call microphone. */
+  sounds: 'off' | 'me' | 'call';
+  soundVolume: number;
   /** Listen to the microphone and vanish / reappear on a finger snap. */
   snapSound: boolean;
   /** 0..1: higher reacts to quieter snaps (and is more likely to mistake other clicks). */
@@ -103,6 +106,8 @@ export const DEFAULT_SETTINGS: Settings = {
   hallucinate: 0,
   magic: false,
   claws: false,
+  sounds: 'me',
+  soundVolume: 0.8,
   snapSound: false,
   snapSensitivity: 0.5,
 };
@@ -216,7 +221,8 @@ export function normalizeSettings(raw: unknown): Settings {
   const s = { ...DEFAULT_SETTINGS, ...(raw && typeof raw === 'object' ? (raw as Partial<Settings>) : {}) };
   const clamp01 = (v: number) => Math.min(1, Math.max(0, Number(v) || 0));
   s.faceIntensity = clamp01(s.faceIntensity);
-  for (const k of ['vignette', 'grain', 'flicker', 'glitch', 'fog', 'hallucinate', 'snapSensitivity'] as const) s[k] = clamp01(s[k]);
+  for (const k of ['vignette', 'grain', 'flicker', 'glitch', 'fog', 'hallucinate', 'snapSensitivity', 'soundVolume'] as const) s[k] = clamp01(s[k]);
+  if (!['off', 'me', 'call'].includes(s.sounds)) s.sounds = 'me';
   s.snapSound = !!s.snapSound;
   s.magic = !!s.magic;
   s.claws = !!s.claws;

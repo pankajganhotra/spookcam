@@ -99,7 +99,7 @@ export function buildHalo(filter: number, f: FaceFrame, out: Float32Array): numb
 
 // ── Props ──
 
-export const PROP = { horn: 0, cone: 1, disk: 2, sphere: 3, ear: 4, curtain: 5, candle: 6, claw: 7 } as const;
+export const PROP = { horn: 0, cone: 1, disk: 2, sphere: 3, ear: 4, curtain: 5, claw: 7 } as const;
 
 export interface Prop {
   kind: number;

@@ -3,7 +3,7 @@
 import type { FrameProcessor, SpookEngine } from '../engine/engine';
 import { ENGINE_KEY, ENGINE_READY_EVENT, listen, post, type BridgeToPage } from '../shared/protocol';
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings';
-import { wrapVideoTrack } from '../shared/track';
+import { mirrorTrack, wrapVideoTrack } from '../shared/track';
 import type { EngineFactory } from '../engine/main';
 import type { AssetName } from '../engine/detectors';
 
@@ -61,6 +61,7 @@ declare global {
     if (!factory || engine) return;
     engine = factory.create(loadAsset, settings ?? DEFAULT_SETTINGS, (status) => post({ type: 'status', status }), detectorUrl);
     engine.setAudioProvider(audioProvider);
+    if (callMixer) engine.setCallMixer(callMixer.ctx, callMixer.bus);
   };
   window.addEventListener(ENGINE_READY_EVENT, createEngine);
 
@@ -108,14 +109,44 @@ declare global {
     return own.getAudioTracks()[0] ?? null;
   };
 
+  // "Everyone in the call" scare sounds: the outgoing mic becomes mic + sound-effect bus.
+  let callMixer: { ctx: AudioContext; bus: GainNode } | undefined;
+  const mixIntoCall = async (track: MediaStreamTrack): Promise<MediaStreamTrack> => {
+    const ctx = new AudioContext({ latencyHint: 'interactive' });
+    if (ctx.state !== 'running') await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 400))]);
+    if (ctx.state !== 'running') {
+      // Autoplay policy blocked audio: never risk sending a silent mic — pass the real one through.
+      console.warn(`[SpookCam] audio engine is ${ctx.state}; scare sounds will play only on this device`);
+      void ctx.close();
+      return track;
+    }
+    const dest = ctx.createMediaStreamDestination();
+    ctx.createMediaStreamSource(new MediaStream([track])).connect(dest);
+    const bus = ctx.createGain();
+    bus.connect(dest);
+    callMixer = { ctx, bus };
+    engine?.setCallMixer(ctx, bus);
+    return mirrorTrack(dest.stream.getAudioTracks()[0], track, () => void ctx.close());
+  };
+
   const patched = async function getUserMedia(constraints?: MediaStreamConstraints): Promise<MediaStream> {
     const stream = await original(constraints);
     watchPageAudio(stream);
-    if (!constraints?.video || !stream.getVideoTracks().length) return stream;
+    const hasVideo = !!constraints?.video && stream.getVideoTracks().length > 0;
+    const hasAudio = stream.getAudioTracks().length > 0;
+    if (!hasVideo && !hasAudio) return stream;
     await Promise.race([settingsArrived, new Promise((r) => setTimeout(r, 1500))]);
-    if (!(settings ?? DEFAULT_SETTINGS).enabled) return stream;
+    const s = settings ?? DEFAULT_SETTINGS;
+    if (!s.enabled) return stream;
+    const mixAudio = hasAudio && s.sounds === 'call';
+    if (!hasVideo && !mixAudio) return stream;
     try {
-      const tracks = stream.getTracks().map((t) => (t.kind === 'video' ? wrapVideoTrack(t, processorFactory()) : t));
+      const tracks = await Promise.all(
+        stream.getTracks().map(async (t) => {
+          if (t.kind === 'video') return hasVideo ? wrapVideoTrack(t, processorFactory()) : t;
+          return mixAudio ? mixIntoCall(t) : t;
+        }),
+      );
       return new MediaStream(tracks);
     } catch (err) {
       console.error('[SpookCam] could not attach to camera, passing through', err);

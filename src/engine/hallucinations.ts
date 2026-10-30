@@ -48,6 +48,8 @@ export class Hallucinations {
   private events: Event[] = [];
   private nextAt = 0;
   private seed = 1;
+  /** Called whenever a new hallucination actually starts (for its sound effect). */
+  onSpawn?: (kind: HallucinationKind) => void;
 
   /** Schedules new events; `intensity` 0 disables random scares (manual ones still play). */
   tick(nowSec: number, intensity: number) {
@@ -80,6 +82,7 @@ export class Hallucinations {
   spawn(start: number, kind: HallucinationKind) {
     if (this.events.some((e) => e.kind === kind)) return;
     this.events.push({ kind, start, dur: DURATION[kind], seed: this.seed++ });
+    this.onSpawn?.(kind);
   }
 
   state(nowSec: number): HallucinationState {

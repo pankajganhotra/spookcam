@@ -102,6 +102,16 @@ export async function mountControls(opts: ControlsOptions) {
   const meterFill = h('i');
   const meterLabel = h('span', { class: 'hint' });
   const listenHint = h('span', { class: 'hint' });
+  const soundHint = h('p', { class: 'hint', style: 'margin:0' });
+  renderers.push(() => {
+    soundHint.textContent =
+      settings.sounds === 'call'
+        ? 'Sounds are mixed into your microphone so everyone hears them. Turn your mic off and on once (or rejoin) to start.'
+        : settings.sounds === 'me'
+          ? 'Only you hear the sounds, through your speakers.'
+          : '';
+    soundHint.hidden = settings.sounds === 'off';
+  });
   const snapZone = h(
     'div',
     { class: 'snap-zone' },
@@ -124,7 +134,7 @@ export async function mountControls(opts: ControlsOptions) {
     if (!settings.enabled) statusText.textContent = 'SpookCam is off';
     else if (s?.error) statusText.textContent = `Effects stopped: ${s.error}`;
     else if (live) {
-      const magic = (s!.gestures ?? []).map((g) => ({ fist: '✊ candle', palm: '🖐️ fireball', point: '☝️ fingertip flame' })[g as 'fist']).filter(Boolean);
+      const magic = (s!.gestures ?? []).map((g) => ({ fist: '✊ fireball', palm: '🖐️ burning fingers', point: '☝️ fingertip flame' })[g as 'fist']).filter(Boolean);
       statusText.textContent = `${s!.loading ? 'Summoning models… ' : ''}${s!.fps} fps · ${s!.faces} ${s!.faces === 1 ? 'face' : 'faces'}${s!.hands ? ` · ${s!.hands} ${s!.hands === 1 ? 'hand' : 'hands'}` : ''}${magic.length ? ` · ${magic.join(', ')}` : ''}`;
     }
     else statusText.textContent = opts.idleHint;
@@ -216,6 +226,9 @@ export async function mountControls(opts: ControlsOptions) {
         { class: 'stack' },
         slider('How often', () => settings.hallucinate, (hallucinate) => update({ hallucinate }, true), { fmt: (v) => (v ? `${Math.round(v * 100)}` : 'off') }),
         h('p', { class: 'hint', style: 'margin:0' }, 'Your jaw stretches, eyes bulge, face melts, you twitch, a lagging double follows you, a figure appears behind you — or your own face lunges at the camera.'),
+        seg('Scare sounds', [{ id: 'off', name: 'Silent' }, { id: 'me', name: 'Just me' }, { id: 'call', name: 'Whole call' }] as const, () => settings.sounds, (sounds) => update({ sounds })),
+        slider('Volume', () => settings.soundVolume, (soundVolume) => update({ soundVolume }, true)),
+        soundHint,
       ),
     ),
     section(
@@ -226,9 +239,9 @@ export async function mountControls(opts: ControlsOptions) {
         { class: 'gestures' },
         h('li', {}, h('span', { 'aria-hidden': 'true' }, '😮'), 'Open your mouth wide to breathe fire'),
         h('li', {}, h('span', { 'aria-hidden': 'true' }, '😗'), 'Pucker up to blow smoke'),
-        h('li', {}, h('span', { 'aria-hidden': 'true' }, '✊'), 'Make a fist to hold a lit candle'),
-        h('li', {}, h('span', { 'aria-hidden': 'true' }, '🖐️'), 'Open your palm to summon a fireball'),
-        h('li', {}, h('span', { 'aria-hidden': 'true' }, '☝️'), 'Point to light your fingertip'),
+        h('li', {}, h('span', { 'aria-hidden': 'true' }, '🖐️'), 'Open your hand to light every fingertip'),
+        h('li', {}, h('span', { 'aria-hidden': 'true' }, '☝️'), 'Point to light one fingertip'),
+        h('li', {}, h('span', { 'aria-hidden': 'true' }, '✊'), 'Make a fist to hold a fireball'),
       ),
       h('div', { class: 'inline', style: 'margin-top:10px' }, toggle('Claws', () => settings.claws, (claws) => update({ claws })), h('span', { class: 'hint' }, 'Talons on every finger')),
     ),

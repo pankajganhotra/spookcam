@@ -19,9 +19,16 @@ uses the camera — Google Meet, Zoom (web), Teams, Discord, Whereby, or your ow
 - **Hallucinations** that strike at random (or on <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd>):
   your jaw stretches into a scream, eyes bulge into voids, your face melts, you twitch violently,
   a lagging double follows you, a shadow figure appears behind you, subliminal negative flashes.
-- **Gesture magic**: open your mouth wide to breathe fire, pucker to blow smoke, make a fist to
-  hold a lit candle, open your palm for a fireball, point to light your fingertip — flames light
-  up your face. Plus **claws** on every finger.
+- **Jump scare**: lights cut, then your own face lunges at the camera with hollow black eyes and a
+  ripped-open screaming mouth, and snaps back as if nothing happened.
+- **Scare sounds**, synthesised live (no audio files): an orchestral stinger + scream for the jump
+  scare, moans, violin screeches, whispers, a drone when the figure appears, a dust whoosh when you
+  vanish. Play them on your speakers only, or mix them into your outgoing microphone so the whole
+  call hears them (if the browser blocks audio, the real mic is passed through untouched).
+- **Gesture magic**: open your mouth wide to breathe fire, pucker to blow smoke, open your hand to
+  set every fingertip alight, point to light one fingertip, make a fist to hold a fireball — flames
+  light up your face. Plus **claws** on every finger. Tracked hands are kept in the person mask,
+  so they never disappear into a replaced background.
 - **Haunted backdrops**: graveyard, blood moon, or the void (with blinking eyes), plus a
   see-through **ghost body** mode.
 - **Atmosphere**: blood / sickly / noir / old-film / night-vision grades, creeping fog, vignette, film grain,
@@ -81,7 +88,12 @@ page (MAIN world)                         extension
 npm run dev          # rebuild on change (reload the extension in chrome://extensions)
 npm run typecheck
 npm test             # snap-detector unit test + E2E with a fake camera → test/out/*.jpg
-node test/hands-e2e.mjs  # hand tracking + gestures on real gesture photos
+#   npm test runs, in order:
+#   test/snap-unit.mjs       finger-snap analyser on synthetic speech / tone / typing / snaps
+#   test/sfx-test.mjs        every scare sound rendered offline: audible, never clipping
+#   test/e2e.mjs             camera hook, all looks, vanish styles, hallucinations, magic, strict CSP
+#   test/hands-e2e.mjs       hand tracking + gestures on real photos, hands kept over the Void
+#   test/call-sound-e2e.mjs  jump-scare sound arrives on the outgoing call microphone
 ```
 
 The E2E test loads `dist/` with a synthetic camera made from `test/fixtures/portrait.jpg`, then

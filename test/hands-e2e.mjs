@@ -62,6 +62,31 @@ for (const { image, expect } of CASES) {
     await wait(800);
     const data = await page.evaluate(() => window.grab());
     await writeFile(resolve(root, `test/out/hands-${expect}.jpg`), Buffer.from(data.split(',')[1], 'base64'));
+
+    // Over the Void backdrop the hand must stay visible (segmentation alone tends to drop it).
+    await sw.evaluate(() => chrome.storage.local.get('spookcam.settings').then(({ ['spookcam.settings']: s }) => chrome.storage.local.set({ 'spookcam.settings': { ...s, backdrop: 'void' } })));
+    await wait(3000);
+    const handLuma = await page.evaluate(() => {
+      const v = document.getElementById('v');
+      const c = document.createElement('canvas');
+      c.width = 64; c.height = 48;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(v, 0, 0, 64, 48);
+      const px = ctx.getImageData(24, 18, 16, 12).data; // centre of frame, where the hand is
+      let sum = 0;
+      for (let i = 0; i < px.length; i += 4) sum += (px[i] + px[i + 1] + px[i + 2]) / 3;
+      return sum / (px.length / 4);
+    });
+    check(handLuma > 60, `${image}: hand stays visible over the Void backdrop (brightness ${handLuma.toFixed(0)})`);
+    const vdata = await page.evaluate(() => window.grab());
+    await writeFile(resolve(root, `test/out/hands-${expect}-void.jpg`), Buffer.from(vdata.split(',')[1], 'base64'));
+    if (expect === 'point') {
+      await page.evaluate(() => (window.__spookcamForce = { gesture: 'palm' }));
+      await wait(1500);
+      const pdata = await page.evaluate(() => window.grab());
+      await writeFile(resolve(root, 'test/out/hands-palm-fingers.jpg'), Buffer.from(pdata.split(',')[1], 'base64'));
+      await page.evaluate(() => (window.__spookcamForce = {}));
+    }
   } finally {
     await browser.close();
   }

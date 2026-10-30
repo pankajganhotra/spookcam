@@ -9,7 +9,7 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --watch",
     "typecheck": "tsc -p .",
-    "test": "node test/snap-unit.mjs && node test/e2e.mjs",
+    "test": "node test/snap-unit.mjs && node test/sfx-test.mjs && node test/e2e.mjs && node test/hands-e2e.mjs && node test/call-sound-e2e.mjs",
     "postinstall": "node scripts/fetch-assets.mjs"
   },
   "license": "MIT",

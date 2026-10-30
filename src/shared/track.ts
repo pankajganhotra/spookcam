@@ -86,7 +86,7 @@ function wrapWithCanvas(source: MediaStreamTrack, getProcessor: () => FrameProce
  * capabilities and constraints. Clones share the camera, which is released only once the
  * track and every clone of it have been stopped.
  */
-function mirrorTrack(out: MediaStreamTrack, source: MediaStreamTrack, onStop?: () => void): MediaStreamTrack {
+export function mirrorTrack(out: MediaStreamTrack, source: MediaStreamTrack, onStop?: () => void): MediaStreamTrack {
   const live = new Set<MediaStreamTrack>();
 
   const release = (t: MediaStreamTrack) => {

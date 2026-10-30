@@ -129,6 +129,24 @@ void main() {
 }
 `;
 
+/** Round dabs that stamp tracked hands into the person mask (blended with MAX). */
+export const HANDMASK_VS = /* glsl */ `${HEADER}
+in vec2 aPos;
+in float aSize;
+void main() {
+  gl_PointSize = aSize;
+  gl_Position = vec4(aPos * 2.0 - 1.0, 0.0, 1.0);
+}
+`;
+
+export const HANDMASK_FS = /* glsl */ `${HEADER}
+out vec4 o;
+void main() {
+  float d = length(gl_PointCoord - 0.5);
+  o = vec4(smoothstep(0.5, 0.3, d), 0.0, 0.0, 1.0);
+}
+`;
+
 /** Snapshot of the person layer (rgb) and its mask (a) for the echo hallucination. */
 export const ECHO_FS = /* glsl */ `${HEADER}
 in vec2 vUv;

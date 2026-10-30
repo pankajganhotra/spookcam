@@ -43,8 +43,6 @@ export interface MagicFrame {
   fire: Float32Array;
   fireCount: number;
   flames: Flame[];
-  /** Strip vertices (x, y uv, t, s) per candle body. */
-  candles: Float32Array[];
   lights: Light[];
 }
 
@@ -149,7 +147,6 @@ export class Magic {
   update(dt: number, nowSec: number, res: V2, faces: Float32Array[], blend: Float32Array[] | null, hands: Float32Array[], enabled: boolean, forceGesture?: Gesture): MagicFrame {
     dt = Math.min(dt, 0.1);
     const flames: Flame[] = [];
-    const candles: Float32Array[] = [];
     const lights: Light[] = [];
     const [W, H] = res;
 
@@ -194,40 +191,44 @@ export class Magic {
         const px = (j: number): V2 => [h[j * 2] * W, h[j * 2 + 1] * H];
         const hs = Math.hypot(px(0)[0] - px(9)[0], px(0)[1] - px(9)[1]); // wrist → middle knuckle
         if (hs < 12) return;
-        if (g === 'fist') {
-          // A candle standing up out of the fist, between thumb and index finger.
-          const base: V2 = [(px(4)[0] + px(6)[0]) / 2, (px(4)[1] + px(6)[1]) / 2];
-          const height = hs * 0.85, halfW = hs * 0.15;
-          const strip = new Float32Array(4 * 4);
-          [[0, -1], [0, 1], [1, -1], [1, 1]].forEach(([t, s], k) => strip.set([(base[0] + s * halfW) / W, (base[1] - t * height) / H, t, s], k * 4));
-          candles.push(strip);
-          const tip: V2 = [base[0], base[1] - height];
-          flames.push({ x: tip[0], y: tip[1], size: hs * 0.55, kind: 0, seed: i * 7.3 });
-          lights.push({ x: tip[0], y: tip[1] - hs * 0.15, radius: hs * 3.2, intensity: 0.75 * (0.9 + 0.1 * Math.sin(nowSec * 17 + i)) });
-          if (rnd() < dt * 3) this.spawn(P.Smoke, tip[0], tip[1] - hs * 0.5, (rnd() - 0.5) * hs * 0.1, -hs * 0.4, 2.5, hs * 0.04, hs * 0.3, hs * 0.3);
-        } else if (g === 'palm') {
-          let cx = 0, cy = 0;
-          for (const j of [0, 5, 9, 13, 17]) {
-            cx += px(j)[0] / 5;
-            cy += px(j)[1] / 5;
+        /** A flame burning on a fingertip, nudged past the tip along the finger. */
+        const fingerFlame = (tipIdx: number, dipIdx: number, size: number, seed: number, sparks: number) => {
+          const tip = px(tipIdx), dip = px(dipIdx);
+          const len = Math.hypot(tip[0] - dip[0], tip[1] - dip[1]) || 1;
+          const f: V2 = [tip[0] + ((tip[0] - dip[0]) / len) * hs * 0.06, tip[1] + ((tip[1] - dip[1]) / len) * hs * 0.06];
+          flames.push({ x: f[0], y: f[1], size, kind: 0, seed });
+          for (let k = this.emitCount(`tip${i}-${tipIdx}`, sparks, dt); k > 0; k--) {
+            this.spawn(P.Spark, f[0], f[1], (rnd() - 0.5) * hs * 0.5, -hs * (0.4 + 0.8 * rnd()), 0.4 + 0.5 * rnd(), hs * 0.025, hs * 0.008, hs * 0.5);
           }
-          const orb: V2 = [cx, cy - hs * 0.9];
-          const r = hs * 0.55 * (0.92 + 0.08 * Math.sin(nowSec * 9 + i));
+          return f;
+        };
+        if (g === 'palm') {
+          // Every fingertip burns like a candle wick (thumb included).
+          let lx = 0, ly = 0;
+          [[4, 3], [8, 7], [12, 11], [16, 15], [20, 19]].forEach(([tip, dip], k) => {
+            const f = fingerFlame(tip, dip, hs * (k === 0 ? 0.3 : 0.34), i * 7.3 + k * 1.7, 10);
+            lx += f[0] / 5;
+            ly += f[1] / 5;
+          });
+          lights.push({ x: lx, y: ly - hs * 0.2, radius: hs * 3.4, intensity: 0.8 * (0.9 + 0.1 * Math.sin(nowSec * 17 + i)) });
+        } else if (g === 'point') {
+          const f = fingerFlame(8, 7, hs * 0.4, i * 5.7 + 2, 25);
+          lights.push({ x: f[0], y: f[1] - hs * 0.15, radius: hs * 2.6, intensity: 0.6 });
+        } else if (g === 'fist') {
+          // A fireball held just above the knuckles.
+          let cx = 0, cy = 0;
+          for (const j of [5, 9, 13, 17]) {
+            cx += px(j)[0] / 4;
+            cy += px(j)[1] / 4;
+          }
+          const orb: V2 = [cx, cy - hs * 0.75];
+          const r = hs * 0.5 * (0.92 + 0.08 * Math.sin(nowSec * 9 + i));
           flames.push({ x: orb[0], y: orb[1], size: r, kind: 1, seed: i * 3.1 });
           for (let k = this.emitCount(`orb${i}`, 70, dt); k > 0; k--) {
             const a = rnd() * Math.PI * 2;
             this.spawn(P.Fire, orb[0] + Math.cos(a) * r * 0.5, orb[1] + Math.sin(a) * r * 0.5, Math.cos(a) * hs * 0.3, Math.sin(a) * hs * 0.2 - hs * 0.5, 0.5 + 0.4 * rnd(), r * 0.35, r * 0.15, hs * 1.2);
           }
           lights.push({ x: orb[0], y: orb[1], radius: hs * 4, intensity: 0.7 });
-        } else if (g === 'point') {
-          const tip = px(8), dip = px(7);
-          const len = Math.hypot(tip[0] - dip[0], tip[1] - dip[1]) || 1;
-          const f: V2 = [tip[0] + ((tip[0] - dip[0]) / len) * hs * 0.08, tip[1] + ((tip[1] - dip[1]) / len) * hs * 0.08];
-          flames.push({ x: f[0], y: f[1], size: hs * 0.4, kind: 0, seed: i * 5.7 + 2 });
-          for (let k = this.emitCount(`tip${i}`, 25, dt); k > 0; k--) {
-            this.spawn(P.Spark, f[0], f[1], (rnd() - 0.5) * hs * 0.6, -hs * (0.4 + 0.8 * rnd()), 0.5 + 0.5 * rnd(), hs * 0.03, hs * 0.01, hs * 0.5);
-          }
-          lights.push({ x: f[0], y: f[1] - hs * 0.15, radius: hs * 2.6, intensity: 0.6 });
         }
       });
       this.gestures_.length = hands.length;
@@ -273,7 +274,7 @@ export class Magic {
         fire.set([this.x[i] / W, this.y[i] / H, size, r * alpha, gch * alpha, b * alpha, alpha], fc++ * 7);
       }
     }
-    return { smoke, smokeCount: sc, fire, fireCount: fc, flames, candles, lights: lights.slice(0, 4) };
+    return { smoke, smokeCount: sc, fire, fireCount: fc, flames, lights: lights.slice(0, 4) };
   }
 }
 
