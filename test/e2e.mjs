@@ -2,6 +2,7 @@
 // opens a plain getUserMedia page, cycles through effects and saves what the "call" receives.
 // Usage: npm run build && npm test   → screenshots in test/out/
 import puppeteer from 'puppeteer';
+import { micSignal, toWav } from './mic-signal.mjs';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -24,6 +25,10 @@ try {
   ]);
 }
 
+// Fake microphone (headless Chrome may play it silently; the analyser itself is covered by snap-unit.mjs).
+const wav = resolve(root, 'test/fixtures/mic.wav');
+await writeFile(wav, toWav(micSignal(10)));
+
 const server = createServer(async (req, res) => {
   res.setHeader('content-type', 'text/html');
   // A Meet-like strict policy: no 'wasm-unsafe-eval', no extension URLs.
@@ -37,10 +42,12 @@ const browser = await puppeteer.launch({
   headless: process.env.HEADFUL ? false : true,
   pipe: true,
   enableExtensions: [dist],
+  protocolTimeout: 180000,
   args: [
     '--use-fake-ui-for-media-stream',
     '--use-fake-device-for-media-stream',
     `--use-file-for-fake-video-capture=${y4m}`,
+    `--use-file-for-fake-audio-capture=${wav}`,
     '--autoplay-policy=no-user-gesture-required',
     '--enable-unsafe-swiftshader',
   ],
@@ -69,7 +76,7 @@ try {
     }
   });
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(`http://localhost:${port}/`);
+  await page.goto(`http://localhost:${port}/?audio=1`);
   const info = await page.evaluate(() => window.ready);
   check(info.ctor === 'MediaStreamTrackGenerator', `camera wrapped via ${info.ctor}`);
   check(!!info.label, `track label mirrored: "${info.label}"`);
@@ -156,6 +163,48 @@ try {
   await shot('atmosphere');
   await setSettings({ tint: 'none', vignette: 0, grain: 0, fog: 0, glitch: 0 });
 
+  // Hallucinations on the Exorcism look: force each kind once.
+  const forceIt = (f) => page.evaluate((f) => (window.__spookcamForce = f), f);
+  // Software GL is slow; wait until the engine has picked the forced event up before timing shots.
+  const consumed = async () => {
+    for (let i = 0; i < 100 && (await page.evaluate(() => !!window.__spookcamForce?.hallucination)); i++) await wait(50);
+  };
+  await setSettings({ face: 'possessed', backdrop: 'void' });
+  await wait(1200);
+  for (const [kind, ms] of [['jaw', 700], ['eyes', 600], ['melt', 1300], ['twitch', 250], ['echo', 1200], ['figure', 3000], ['flash', 60]]) {
+    await forceIt({ hallucination: kind });
+    await consumed();
+    await wait(ms);
+    await shot(`hallucination-${kind}`);
+    await wait(kind === 'figure' ? 3500 : 1600);
+  }
+  await setSettings({ face: 'none', backdrop: 'none' });
+
+  // Gesture magic with forced expressions / gestures (a photo can't open its mouth).
+  await setSettings({ magic: true, claws: true });
+  await forceIt({ jawOpen: 0.95 });
+  await wait(900);
+  await shot('magic-fire-breath');
+  await forceIt({ jawOpen: 0, mouthPucker: 0.9 });
+  await wait(1800);
+  await shot('magic-smoke');
+  for (const gesture of ['fist', 'palm', 'point']) {
+    await forceIt({ gesture });
+    await wait(900);
+    await shot(`magic-${gesture}`);
+  }
+  await forceIt({});
+  await setSettings({ magic: false, claws: false });
+  await wait(1500);
+
+  // Finger-snap listening attaches to the call's own microphone track.
+  await setSettings({ snapSound: true, snapSensitivity: 0.5 });
+  const listen = await waitFor((s) => s.listening === 'on', 'snap listener starts on the call microphone', 10000);
+  if (listen?.listening === 'on') check(true, "snap listener running on the call's microphone");
+  await setSettings({ snapSound: false });
+  const off = await waitFor((s) => s.listening === 'off', 'snap listener stops when turned off', 5000);
+  if (off?.listening === 'off') check(true, 'snap listener releases the microphone when turned off');
+
   for (const style of ['dust', 'embers', 'cloak']) {
     await setSettings({ vanishStyle: style, vanishDuration: 3 });
     await wait(400);
@@ -176,13 +225,19 @@ try {
 
   // Strict CSP page still gets effects.
   await setSettings({ face: 'none' });
+  const stamp = (m) => process.env.DEBUG && console.log(`  [${new Date().toISOString().slice(17, 23)}] ${m}`);
+  stamp('closing call page');
   await page.close();
+  stamp('closed');
   const strict = await browser.newPage();
   if (process.env.DEBUG) strict.on('console', (m) => console.log(`  [strict:${m.type()}] ${m.text()}`));
   strict.on('pageerror', (e) => errors.push(`strict: ${e}`));
   strict.on('console', (m) => m.type() === 'error' && !/^(INFO|W\d{4}|I\d{4})[: ]/.test(m.text()) && errors.push(`strict: ${m.text()}`));
   await strict.goto(`http://localhost:${port}/strict`);
-  await strict.evaluate(() => window.ready);
+  stamp('strict loaded');
+  const ready = await Promise.race([strict.evaluate(() => window.ready).then(() => true), wait(30000).then(() => false)]);
+  stamp(`strict camera ${ready}`);
+  check(ready, 'strict CSP page gets its camera');
   await setSettings({ face: 'demon' });
   const sst = await waitFor((s) => s.faces > 0 && !s.loading, 'strict CSP page: face paint works', 30000);
   if (sst?.faces) check(!sst.error, `strict CSP page: face paint works (${sst.fps} fps)`);

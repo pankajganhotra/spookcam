@@ -8,6 +8,7 @@ export const ASSET_PATHS: Record<AssetName, string> = {
   wasm: 'wasm/vision.wasm',
   face: 'models/face_landmarker.task',
   segmenter: 'models/selfie_segmenter.tflite',
+  hand: 'models/hand_landmarker.task',
 };
 
 /** Global (MAIN world) slot where the lazily injected engine bundle registers itself. */

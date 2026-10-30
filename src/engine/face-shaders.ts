@@ -723,6 +723,19 @@ void main() {
     float inner = step(abs(s), 0.55 * (1.0 - t)) * step(t, 0.8);
     col = mix(col, vec3(0.35, 0.18, 0.16) * (0.6 + 0.4 * fur), inner * 0.8);
     a = smoothstep(1.0, 0.7 + 0.25 * fur, abs(s));
+  } else if (uKind == 6) { // candle wax: t base..top, s across
+    float round_ = sqrt(max(0.0, 1.0 - s * s));
+    col = vec3(0.93, 0.88, 0.76) * (0.3 + 0.8 * round_);
+    col += vec3(1.0, 0.75, 0.4) * smoothstep(0.75, 1.0, t) * 0.5; // lit from the flame above
+    float drip = smoothstep(0.92 - 0.25 * noise(vec2(s * 6.0, 1.0)), 1.0, t);
+    col = mix(col, vec3(0.98, 0.94, 0.85) * (0.6 + 0.4 * round_), drip * 0.6);
+    a = smoothstep(1.0, 0.9, abs(s));
+  } else if (uKind == 7) { // claw: t base..tip, s across
+    float round_ = sqrt(max(0.0, 1.0 - s * s));
+    col = mix(vec3(0.16, 0.13, 0.1), vec3(0.62, 0.56, 0.42), smoothstep(0.55, 1.0, t)) * (0.35 + 0.8 * round_);
+    col += vec3(0.8) * pow(max(0.0, 1.0 - abs(s + 0.35) * 3.0), 8.0) * 0.6; // glossy ridge
+    col *= 0.85 + 0.15 * sin(t * 40.0); // growth rings
+    a = smoothstep(1.0, 0.75, abs(s)) * smoothstep(0.0, 0.15, t);
   } else { // kind 5: hair curtain — t down the length, s across (+1 = inner edge)
     float wave = sin(t * 6.0 + uTime * 0.6) * 0.04;
     float u = (s + 1.0) * 0.5 + wave;

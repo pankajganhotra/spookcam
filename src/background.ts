@@ -16,7 +16,7 @@ export async function broadcastCommand(cmd: EngineCommand) {
 }
 
 chrome.commands.onCommand.addListener((command) => {
-  if (command === 'snap' || command === 'relearn-background') void broadcastCommand(command);
+  if (command === 'snap' || command === 'relearn-background' || command === 'scare') void broadcastCommand(command);
 });
 
 function updateBadge(tabId: number, status: EngineStatus) {

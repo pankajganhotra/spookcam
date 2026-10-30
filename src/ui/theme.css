@@ -68,9 +68,9 @@ button, input, select { font: inherit; color: inherit; }
 .presets .tile { flex: 0 0 74px; }
 
 /* Segmented control */
-.seg { display: flex; background: var(--ink-sunk); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 2px; }
+.seg { display: flex; flex-wrap: wrap; gap: 2px; background: var(--ink-sunk); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 2px; }
 .seg button {
-  flex: 1;
+  flex: 1 0 auto;
   appearance: none;
   border: 0;
   background: none;
@@ -162,4 +162,7 @@ kbd { font: 11px var(--ui); border: 1px solid var(--line); border-bottom-width: 
 
 .stack { display: grid; gap: 8px; }
 .inline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.gestures { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; color: var(--bone-dim); }
+.gestures li { display: flex; gap: 10px; align-items: center; }
+.gestures span { width: 22px; text-align: center; font-size: 16px; }
 [hidden] { display: none !important; }

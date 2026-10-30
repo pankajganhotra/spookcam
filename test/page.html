@@ -5,11 +5,13 @@
     <video id="v" autoplay playsinline muted style="width:640px;height:480px;display:block"></video>
     <script>
       window.ready = (async () => {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+        const withAudio = new URLSearchParams(location.search).has('audio');
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: withAudio });
         const v = document.getElementById('v');
         v.srcObject = stream;
         await v.play();
         window.track = stream.getVideoTracks()[0];
+        window.stream = stream;
         return { label: window.track.label, settings: window.track.getSettings(), ctor: window.track.constructor.name };
       })();
       window.grab = () => {

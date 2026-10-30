@@ -129,6 +129,14 @@ void main() {
 }
 `;
 
+/** Snapshot of the person layer (rgb) and its mask (a) for the echo hallucination. */
+export const ECHO_FS = /* glsl */ `${HEADER}
+in vec2 vUv;
+uniform sampler2D uPerson, uMask;
+out vec4 o;
+void main() { o = vec4(texture(uPerson, vUv).rgb, smoothstep(0.3, 0.7, texture(uMask, vUv).r)); }
+`;
+
 // ───────────────────────────────── Composite ─────────────────────────────────
 
 export const COMPOSITE_FS = /* glsl */ `${HEADER}
@@ -140,7 +148,61 @@ uniform bool uHasMask, uNeedFill, uGhost;
 uniform int uBackdrop, uStyle;
 uniform float uT, uDur, uTime, uPlateLods;
 uniform vec2 uMaskTexel;
+// Hallucinations
+uniform bool uWarp;
+uniform vec2 uRes, uJerk, uMouth, uEyeL, uEyeR, uFaceC, uDown;
+uniform float uFaceS, uJaw, uBulge, uMelt, uEcho;
+uniform vec3 uFigure; // x (uv), opacity, scale
+uniform sampler2D uEchoTex;
 out vec4 o;
+
+/** Where the person layer should be sampled from: jaw stretch, eye bulge, melt and twitch. */
+vec2 warpUv(vec2 uv) {
+  if (!uWarp) return uv;
+  vec2 p = uv * uRes;
+  vec2 disp = vec2(0.0);
+  float S = max(uFaceS, 1.0);
+  vec2 across = vec2(-uDown.y, uDown.x);
+  if (uJaw > 0.0) {
+    vec2 rel = p - uMouth * uRes;
+    float along = dot(rel, uDown) / S;
+    float side = dot(rel, across) / S;
+    float w = exp(-side * side / 0.08) * smoothstep(-0.1, 0.04, along) * exp(-max(along - 0.75, 0.0) * 5.0);
+    disp += uDown * uJaw * S * 0.42 * w * clamp((along + 0.1) / 0.75, 0.0, 1.0);
+  }
+  if (uBulge > 0.0) {
+    for (int i = 0; i < 2; i++) {
+      vec2 e = (i == 0 ? uEyeL : uEyeR) * uRes;
+      vec2 r = p - e;
+      float d = length(r) / (S * 0.17);
+      if (d < 1.0) disp += r * (1.0 - mix(1.0, 0.4, uBulge * (1.0 - d * d)));
+    }
+  }
+  if (uMelt > 0.0) {
+    vec2 c = uFaceC * uRes;
+    float w = exp(-dot(p - c, p - c) / (S * S * 0.45));
+    float drip = 0.4 + 0.6 * noise(vec2(dot(p, across) / S * 7.0, uTime * 0.4));
+    disp += uDown * uMelt * S * 0.32 * w * drip * smoothstep(-0.7, 0.4, dot(p - c, uDown) / S);
+  }
+  return (p - disp) / uRes - uJerk;
+}
+
+/** A tall, smoky silhouette with pinprick eyes, standing somewhere behind you. */
+vec4 shadowFigure(vec2 uv) {
+  vec2 p = vec2((uv.x - uFigure.x) * uAspect, uv.y) / uFigure.z;
+  p.y -= (1.0 - uFigure.z) * 0.2;
+  float head = length((p - vec2(0.0, 0.27)) / vec2(0.06, 0.078)) - 1.0;
+  float hw = mix(0.035, 0.17, smoothstep(0.35, 0.47, p.y)) + max(p.y - 0.47, 0.0) * 0.12;
+  float body = max(abs(p.x) - hw, 0.33 - p.y);
+  float sd = min(head * 0.06, body) + 0.025 * (fbm(vec2(p.x * 9.0, p.y * 5.0 - uTime * 0.3)) - 0.5);
+  float a = smoothstep(0.012, -0.012, sd);
+  vec2 e = vec2(abs(p.x) - 0.022, p.y - 0.262);
+  float eyes = exp(-dot(e, e) / 0.000018);
+  // Faint backlit rim so it reads against a dark room.
+  float rim = smoothstep(-0.03, -0.004, sd) * a;
+  vec3 col = vec3(0.008, 0.006, 0.01) + vec3(0.2, 0.18, 0.26) * rim + vec3(1.0, 0.85, 0.75) * eyes * 2.0;
+  return vec4(col, max(a, eyes) * uFigure.y);
+}
 
 /** Pull-push hole fill: walk the plate mip chain until enough coverage is gathered. */
 vec3 plateFill(vec2 uv) {
@@ -271,14 +333,19 @@ vec3 ghostly(vec2 uv, float m) {
 
 void main() {
   vec2 uv = vUv;
-  vec4 person = texture(uPerson, uv);
-  float m = personMask(uv);
+  vec2 puv = warpUv(uv);
+  vec4 person = texture(uPerson, puv);
+  float m = personMask(puv);
 
   vec3 bg;
   if (uBackdrop == 1) bg = graveyard(uv);
   else if (uBackdrop == 2) bg = bloodmoon(uv);
   else if (uBackdrop == 3) bg = voidScene(uv);
   else bg = uNeedFill ? plateFill(uv) : person.rgb;
+  if (uFigure.y > 0.0) {
+    vec4 fig = shadowFigure(uv);
+    bg = mix(bg, fig.rgb, fig.a);
+  }
 
   // Disintegration front.
   float e = emitFrac(uv) * uDur;
@@ -287,10 +354,15 @@ void main() {
   float alpha = m * vis;
   if (uGhost) {
     float flick = 0.5 + 0.15 * sin(uTime * 7.0) * sin(uTime * 3.1) + 0.1 * noise(vec2(uTime * 5.0, uv.y * 4.0));
-    fg = ghostly(uv, m);
+    fg = ghostly(puv, m);
     alpha *= flick;
   }
   vec3 col = mix(bg, fg, alpha);
+  if (uEcho > 0.0) {
+    // A lagging afterimage of you, slightly offset and cold.
+    vec4 e = texture(uEchoTex, uv + vec2(0.015 * sin(uTime * 1.7), 0.006));
+    col = mix(col, e.rgb * vec3(0.5, 0.62, 0.9), e.a * uEcho * 0.55 * (1.0 - alpha * 0.5));
+  }
 
   if (uT > 0.0 && uHasMask) {
     float front = m * smoothstep(0.16, 0.0, abs(uT - e + 0.04)) * step(uT, uDur + 0.2);
@@ -379,11 +451,12 @@ ${COMMON}
 in vec2 vUv;
 uniform sampler2D uTex;
 uniform int uTint;
-uniform float uTime, uVignette, uGrain, uFlicker, uGlitch, uFog, uAspect;
+uniform float uTime, uVignette, uGrain, uFlicker, uGlitch, uFog, uAspect, uFlash;
 uniform vec2 uRes;
 out vec4 o;
 void main() {
   vec2 uv = vec2(vUv.x, 1.0 - vUv.y); // canvas is y-up
+  if (uFlash > 0.0) uv = 0.5 + (uv - 0.5) * (1.0 - 0.07 * uFlash) + (vec2(hash12(vec2(uTime, 1.0)), hash12(vec2(uTime, 2.0))) - 0.5) * 0.03 * uFlash;
   // VHS glitch: rare torn bands + chroma split.
   float split = 0.0;
   if (uGlitch > 0.0) {
@@ -425,6 +498,11 @@ void main() {
     c *= mix(1.0, smoothstep(1.05, 0.25, d), uVignette);
   }
   if (uGrain > 0.0) c += (hash12(uv * uRes + fract(uTime * 13.7) * 100.0) - 0.5) * 0.28 * uGrain;
+  if (uFlash > 0.0) {
+    // Subliminal frame: blown-out negative, bleeding red.
+    vec3 neg = vec3(1.0) - c;
+    c = mix(c, vec3(neg.r * 1.3, neg.g * 0.25, neg.b * 0.2), smoothstep(0.0, 0.3, uFlash));
+  }
   o = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
 `;

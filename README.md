@@ -13,6 +13,15 @@ uses the camera — Google Meet, Zoom (web), Teams, Discord, Whereby, or your ow
 - **Thanos snap**: you disintegrate into drifting dust and the room behind you shows through.
   Snap again and the dust flies back together. Two more styles: *burn to embers* and an
   *invisibility cloak* with a refraction shimmer.
+- **Snap your fingers** to vanish and come back: the extension listens to the call's own
+  microphone for the sharp, bright, fast-decaying click of a finger snap (speech, tones and
+  typing are ignored; sensitivity is adjustable). It never reopens a mic the call app stopped.
+- **Hallucinations** that strike at random (or on <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd>):
+  your jaw stretches into a scream, eyes bulge into voids, your face melts, you twitch violently,
+  a lagging double follows you, a shadow figure appears behind you, subliminal negative flashes.
+- **Gesture magic**: open your mouth wide to breathe fire, pucker to blow smoke, make a fist to
+  hold a lit candle, open your palm for a fireball, point to light your fingertip — flames light
+  up your face. Plus **claws** on every finger.
 - **Haunted backdrops**: graveyard, blood moon, or the void (with blinking eyes), plus a
   see-through **ghost body** mode.
 - **Atmosphere**: blood / sickly / noir / old-film / night-vision grades, creeping fog, vignette, film grain,
@@ -71,7 +80,8 @@ page (MAIN world)                         extension
 ```bash
 npm run dev          # rebuild on change (reload the extension in chrome://extensions)
 npm run typecheck
-npm test             # E2E in Chrome for Testing with a fake camera → test/out/*.jpg
+npm test             # snap-detector unit test + E2E with a fake camera → test/out/*.jpg
+node test/hands-e2e.mjs  # hand tracking + gestures on real gesture photos
 ```
 
 The E2E test loads `dist/` with a synthetic camera made from `test/fixtures/portrait.jpg`, then

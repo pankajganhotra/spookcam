@@ -101,6 +101,7 @@ export async function mountControls(opts: ControlsOptions) {
   const statusText = h('span', {}, 'Looking for a camera…');
   const meterFill = h('i');
   const meterLabel = h('span', { class: 'hint' });
+  const listenHint = h('span', { class: 'hint' });
   const snapZone = h(
     'div',
     { class: 'snap-zone' },
@@ -122,7 +123,10 @@ export async function mountControls(opts: ControlsOptions) {
     statusDot.dataset.error = String(!!s?.error);
     if (!settings.enabled) statusText.textContent = 'SpookCam is off';
     else if (s?.error) statusText.textContent = `Effects stopped: ${s.error}`;
-    else if (live) statusText.textContent = `${s!.loading ? 'Summoning models… ' : ''}${s!.fps} fps · ${s!.faces} ${s!.faces === 1 ? 'face' : 'faces'}`;
+    else if (live) {
+      const magic = (s!.gestures ?? []).map((g) => ({ fist: '✊ candle', palm: '🖐️ fireball', point: '☝️ fingertip flame' })[g as 'fist']).filter(Boolean);
+      statusText.textContent = `${s!.loading ? 'Summoning models… ' : ''}${s!.fps} fps · ${s!.faces} ${s!.faces === 1 ? 'face' : 'faces'}${s!.hands ? ` · ${s!.hands} ${s!.hands === 1 ? 'hand' : 'hands'}` : ''}${magic.length ? ` · ${magic.join(', ')}` : ''}`;
+    }
     else statusText.textContent = opts.idleHint;
     const phase = s?.phase ?? 'present';
     seal.dataset.phase = phase;
@@ -132,6 +136,18 @@ export async function mountControls(opts: ControlsOptions) {
     );
     const cov = Math.round((s?.backgroundCoverage ?? 0) * 100);
     meterFill.style.width = `${cov}%`;
+    const heard = s?.heardSnapAt && Date.now() - s.heardSnapAt < 2500;
+    listenHint.textContent = !settings.snapSound
+      ? 'Uses your microphone'
+      : heard
+        ? '🫰 Heard a snap!'
+        : s?.listening === 'on'
+          ? '👂 Listening'
+          : s?.listening === 'blocked'
+            ? 'Microphone is off or blocked'
+            : live
+              ? 'Starting microphone…'
+              : 'Starts with your camera';
     meterLabel.textContent = !live ? 'Background not learned yet' : cov > 92 ? `Background learned — vanish will be clean` : `Background ${cov}% learned · step aside briefly to reveal more`;
   };
   renderers.push(renderStatus);
@@ -149,7 +165,7 @@ export async function mountControls(opts: ControlsOptions) {
   const presetRow = h('div', { class: 'presets' });
   for (const p of PRESETS) {
     presetRow.append(
-      tile(p.emoji, p.name, () => Object.entries(p.patch).every(([k, v]) => settings[k as keyof Settings] === v), () => update(p.patch)),
+      tile(p.emoji, p.name, () => Object.entries(p.patch).every(([k, v]) => settings[k as keyof Settings] === v), () => update({ hallucinate: 0, magic: false, claws: false, ...p.patch })),
     );
   }
 
@@ -193,11 +209,37 @@ export async function mountControls(opts: ControlsOptions) {
       ),
     ),
     section(
+      'Hallucinations',
+      h('button', { class: 'btn', type: 'button', title: 'Trigger a jump scare now (Alt⇧H)', onclick: () => opts.sendCommand('scare') }, 'Scare now'),
+      h(
+        'div',
+        { class: 'stack' },
+        slider('How often', () => settings.hallucinate, (hallucinate) => update({ hallucinate }, true), { fmt: (v) => (v ? `${Math.round(v * 100)}` : 'off') }),
+        h('p', { class: 'hint', style: 'margin:0' }, 'Your jaw stretches, eyes bulge, face melts, you twitch, a lagging double follows you, or a figure appears behind you.'),
+      ),
+    ),
+    section(
+      'Magic',
+      toggle('Gestures', () => settings.magic, (magic) => update({ magic })),
+      h(
+        'ul',
+        { class: 'gestures' },
+        h('li', {}, h('span', { 'aria-hidden': 'true' }, '😮'), 'Open your mouth wide to breathe fire'),
+        h('li', {}, h('span', { 'aria-hidden': 'true' }, '😗'), 'Pucker up to blow smoke'),
+        h('li', {}, h('span', { 'aria-hidden': 'true' }, '✊'), 'Make a fist to hold a lit candle'),
+        h('li', {}, h('span', { 'aria-hidden': 'true' }, '🖐️'), 'Open your palm to summon a fireball'),
+        h('li', {}, h('span', { 'aria-hidden': 'true' }, '☝️'), 'Point to light your fingertip'),
+      ),
+      h('div', { class: 'inline', style: 'margin-top:10px' }, toggle('Claws', () => settings.claws, (claws) => update({ claws })), h('span', { class: 'hint' }, 'Talons on every finger')),
+    ),
+    section(
       'Vanishing',
       null,
       h(
         'div',
         { class: 'stack' },
+        h('div', { class: 'inline' }, toggle('Snap your fingers', () => settings.snapSound, (snapSound) => update({ snapSound })), listenHint),
+        slider('Sensitivity', () => settings.snapSensitivity, (snapSensitivity) => update({ snapSensitivity }, true)),
         seg('Dust drifts', [{ id: 'left', name: 'Drift left' }, { id: 'up', name: 'Rise' }, { id: 'right', name: 'Drift right' }] as const, () => settings.wind, (wind) => update({ wind })),
         slider('Duration', () => settings.vanishDuration, (vanishDuration) => update({ vanishDuration }, true), { min: 0.8, max: 8, step: 0.1, fmt: (v) => `${v.toFixed(1)}s` }),
         slider('Come back', () => settings.autoReturn, (autoReturn) => update({ autoReturn }, true), { min: 0, max: 30, step: 1, fmt: (v) => (v ? `${v}s` : 'never') }),

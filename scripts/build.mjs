@@ -30,7 +30,7 @@ async function copyStatic() {
   for (const page of ['popup', 'studio', 'detector']) {
     await cp(resolve(root, `src/${page}/${page}.html`), resolve(dist, `${page}.html`));
   }
-  for (const m of ['face_landmarker.task', 'selfie_segmenter.tflite']) {
+  for (const m of ['face_landmarker.task', 'selfie_segmenter.tflite', 'hand_landmarker.task']) {
     if (!(await exists(resolve(dist, 'models', m)))) throw new Error(`missing public/models/${m} — run \`npm run fetch-assets\``);
   }
 }

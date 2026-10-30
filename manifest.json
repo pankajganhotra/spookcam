@@ -59,6 +59,10 @@
     "relearn-background": {
       "suggested_key": { "default": "Alt+Shift+B" },
       "description": "Re-learn the background behind you"
+    },
+    "scare": {
+      "suggested_key": { "default": "Alt+Shift+H" },
+      "description": "Jump scare — trigger a hallucination now"
     }
   },
   "content_security_policy": {

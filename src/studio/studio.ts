@@ -25,6 +25,11 @@ const engine = new SpookEngine(new LocalDetectors(load), normalizeSettings((awai
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes[STORAGE_KEY]) engine.setSettings(normalizeSettings(changes[STORAGE_KEY].newValue));
 });
+// Snap detection hears the room through an unprocessed microphone capture.
+engine.setAudioProvider(async () => {
+  const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  return s.getAudioTracks()[0] ?? null;
+});
 
 // Commands from the popup / keyboard shortcut — only act while this tab is the one in view.
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse) => {

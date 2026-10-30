@@ -12,6 +12,10 @@ const ASSETS = [
     out: 'public/models/face_landmarker.task',
   },
   {
+    url: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+    out: 'public/models/hand_landmarker.task',
+  },
+  {
     url: 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite',
     out: 'public/models/selfie_segmenter.tflite',
   },
@@ -23,11 +27,17 @@ const ASSETS = [
     url: 'https://storage.googleapis.com/mediapipe-assets/portrait.jpg',
     out: 'test/fixtures/portrait.jpg',
   },
+  // Hand gesture test photos (MediaPipe's own gesture-recognizer fixtures).
+  ...['pointing_up.jpg', 'victory.jpg', 'thumb_up.jpg', 'fist.jpg'].map((name) => ({
+    url: `https://storage.googleapis.com/mediapipe-assets/${name}`,
+    out: `test/fixtures/${name}`,
+    optional: true,
+  })),
 ];
 
 const force = process.argv.includes('--force');
 
-for (const { url, out } of ASSETS) {
+for (const { url, out, optional } of ASSETS) {
   const dest = resolve(root, out);
   if (!force) {
     try {
@@ -37,7 +47,13 @@ for (const { url, out } of ASSETS) {
     } catch {}
   }
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`${url} -> HTTP ${res.status}`);
+  if (!res.ok) {
+    if (optional) {
+      console.log(`– ${out} unavailable (HTTP ${res.status}), skipped`);
+      continue;
+    }
+    throw new Error(`${url} -> HTTP ${res.status}`);
+  }
   const buf = Buffer.from(await res.arrayBuffer());
   await mkdir(dirname(dest), { recursive: true });
   await writeFile(dest, buf);

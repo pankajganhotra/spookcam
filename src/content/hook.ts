@@ -5,6 +5,7 @@ import { ENGINE_KEY, ENGINE_READY_EVENT, listen, post, type BridgeToPage } from 
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings';
 import { wrapVideoTrack } from '../shared/track';
 import type { EngineFactory } from '../engine/main';
+import type { AssetName } from '../engine/detectors';
 
 declare global {
   interface Window {
@@ -48,7 +49,7 @@ declare global {
   });
   post({ type: 'hello' });
 
-  const loadAsset = (name: 'wasm' | 'face' | 'segmenter') =>
+  const loadAsset = (name: AssetName) =>
     new Promise<ArrayBuffer>((resolve, reject) => {
       const id = nextAssetId++;
       pendingAssets.set(id, { resolve, reject });
@@ -59,6 +60,7 @@ declare global {
     const factory = window[ENGINE_KEY];
     if (!factory || engine) return;
     engine = factory.create(loadAsset, settings ?? DEFAULT_SETTINGS, (status) => post({ type: 'status', status }), detectorUrl);
+    engine.setAudioProvider(audioProvider);
   };
   window.addEventListener(ENGINE_READY_EVENT, createEngine);
 
@@ -80,8 +82,35 @@ declare global {
   };
 
   const original = md.getUserMedia.bind(md);
+
+  // Snap detection listens to the call's own microphone. We only ever *clone* the page's track,
+  // and if the page stops it (e.g. to mute) we stop listening instead of reopening the mic.
+  let pageAudio: MediaStreamTrack | undefined;
+  const watchPageAudio = (stream: MediaStream) => {
+    const track = stream.getAudioTracks()[0];
+    if (!track) return;
+    pageAudio = track;
+    const stop = track.stop.bind(track);
+    Object.defineProperty(track, 'stop', {
+      configurable: true,
+      writable: true,
+      value: () => {
+        stop();
+        engine?.setAudioProvider(audioProvider); // re-sync: listener closes
+      },
+    });
+    engine?.setAudioProvider(audioProvider);
+  };
+  const audioProvider = async (): Promise<MediaStreamTrack | null> => {
+    if (pageAudio) return pageAudio.readyState === 'live' ? pageAudio.clone() : null;
+    // Camera-only page: open our own unprocessed capture (snaps survive noise suppression better).
+    const own = await original({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    return own.getAudioTracks()[0] ?? null;
+  };
+
   const patched = async function getUserMedia(constraints?: MediaStreamConstraints): Promise<MediaStream> {
     const stream = await original(constraints);
+    watchPageAudio(stream);
     if (!constraints?.video || !stream.getVideoTracks().length) return stream;
     await Promise.race([settingsArrived, new Promise((r) => setTimeout(r, 1500))]);
     if (!(settings ?? DEFAULT_SETTINGS).enabled) return stream;

@@ -71,6 +71,16 @@ export interface Settings {
   vanishDuration: number;
   /** Seconds after vanishing before automatically reappearing (0 = never). */
   autoReturn: number;
+  /** 0..1: how often hallucinations (jaw stretch, twitches, shadow figures…) strike. 0 = never. */
+  hallucinate: number;
+  /** Gesture magic: fire breath, smoke, candle in fist, fireball on palm, fingertip flame. */
+  magic: boolean;
+  /** Curved talons on every fingertip. */
+  claws: boolean;
+  /** Listen to the microphone and vanish / reappear on a finger snap. */
+  snapSound: boolean;
+  /** 0..1: higher reacts to quieter snaps (and is more likely to mistake other clicks). */
+  snapSensitivity: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -90,6 +100,11 @@ export const DEFAULT_SETTINGS: Settings = {
   wind: 'right',
   vanishDuration: 3.2,
   autoReturn: 0,
+  hallucinate: 0,
+  magic: false,
+  claws: false,
+  snapSound: false,
+  snapSensitivity: 0.5,
 };
 
 export interface Preset {
@@ -99,7 +114,7 @@ export interface Preset {
   patch: Partial<Settings>;
 }
 
-const CLEAN_ATMOS: Partial<Settings> = { tint: 'none', vignette: 0, grain: 0, flicker: 0, glitch: 0, fog: 0 };
+const CLEAN_ATMOS: Partial<Settings> = { tint: 'none', vignette: 0, grain: 0, flicker: 0, glitch: 0, fog: 0, hallucinate: 0, magic: false, claws: false };
 
 export const PRESETS: Preset[] = [
   { id: 'off', name: 'Clean', emoji: '✨', patch: { face: 'none', backdrop: 'none', ghost: false, ...CLEAN_ATMOS } },
@@ -119,7 +134,7 @@ export const PRESETS: Preset[] = [
     id: 'hellfire',
     name: 'Hellfire',
     emoji: '🔥',
-    patch: { face: 'demon', backdrop: 'bloodmoon', ghost: false, tint: 'blood', vignette: 0.55, grain: 0.25, flicker: 0, glitch: 0, fog: 0.35 },
+    patch: { face: 'demon', backdrop: 'bloodmoon', ghost: false, tint: 'blood', vignette: 0.55, grain: 0.25, flicker: 0, glitch: 0, fog: 0.35, magic: true, claws: true },
   },
   {
     id: 'nosferatu',
@@ -131,7 +146,7 @@ export const PRESETS: Preset[] = [
     id: 'exorcism',
     name: 'Exorcism',
     emoji: '✝️',
-    patch: { face: 'possessed', backdrop: 'void', ghost: false, tint: 'noir', vignette: 0.8, grain: 0.5, flicker: 0.6, glitch: 0.45, fog: 0.3 },
+    patch: { face: 'possessed', backdrop: 'void', ghost: false, tint: 'noir', vignette: 0.8, grain: 0.5, flicker: 0.6, glitch: 0.45, fog: 0.3, hallucinate: 0.75 },
   },
   {
     id: 'apparition',
@@ -155,7 +170,7 @@ export const PRESETS: Preset[] = [
     id: 'fullmoon',
     name: 'Full moon',
     emoji: '🌕',
-    patch: { face: 'werewolf', backdrop: 'graveyard', ghost: false, tint: 'none', vignette: 0.55, grain: 0.2, flicker: 0, glitch: 0, fog: 0.45 },
+    patch: { face: 'werewolf', backdrop: 'graveyard', ghost: false, tint: 'none', vignette: 0.55, grain: 0.2, flicker: 0, glitch: 0, fog: 0.45, claws: true },
   },
   {
     id: 'tomb',
@@ -173,13 +188,13 @@ export const PRESETS: Preset[] = [
     id: 'curse',
     name: 'The curse',
     emoji: '📼',
-    patch: { face: 'onryo', backdrop: 'none', ghost: false, tint: 'sickly', vignette: 0.6, grain: 0.5, flicker: 0.2, glitch: 0.55, fog: 0 },
+    patch: { face: 'onryo', backdrop: 'none', ghost: false, tint: 'sickly', vignette: 0.6, grain: 0.5, flicker: 0.2, glitch: 0.55, fog: 0, hallucinate: 0.45 },
   },
   {
     id: 'coven',
     name: 'Coven',
     emoji: '🧹',
-    patch: { face: 'witch', backdrop: 'bloodmoon', ghost: false, tint: 'none', vignette: 0.55, grain: 0.2, flicker: 0, glitch: 0, fog: 0.4 },
+    patch: { face: 'witch', backdrop: 'bloodmoon', ghost: false, tint: 'none', vignette: 0.55, grain: 0.2, flicker: 0, glitch: 0, fog: 0.4, magic: true, claws: true },
   },
   {
     id: 'dollhouse',
@@ -201,7 +216,10 @@ export function normalizeSettings(raw: unknown): Settings {
   const s = { ...DEFAULT_SETTINGS, ...(raw && typeof raw === 'object' ? (raw as Partial<Settings>) : {}) };
   const clamp01 = (v: number) => Math.min(1, Math.max(0, Number(v) || 0));
   s.faceIntensity = clamp01(s.faceIntensity);
-  for (const k of ['vignette', 'grain', 'flicker', 'glitch', 'fog'] as const) s[k] = clamp01(s[k]);
+  for (const k of ['vignette', 'grain', 'flicker', 'glitch', 'fog', 'hallucinate', 'snapSensitivity'] as const) s[k] = clamp01(s[k]);
+  s.snapSound = !!s.snapSound;
+  s.magic = !!s.magic;
+  s.claws = !!s.claws;
   s.vanishDuration = Math.min(8, Math.max(0.8, Number(s.vanishDuration) || DEFAULT_SETTINGS.vanishDuration));
   s.autoReturn = Math.min(60, Math.max(0, Number(s.autoReturn) || 0));
   if (!FACE_FILTERS.some((f) => f.id === s.face)) s.face = 'none';
@@ -213,7 +231,7 @@ export function normalizeSettings(raw: unknown): Settings {
 }
 
 /** One-shot actions sent to every live camera pipeline. */
-export type EngineCommand = 'snap' | 'vanish' | 'reappear' | 'relearn-background';
+export type EngineCommand = 'snap' | 'vanish' | 'reappear' | 'relearn-background' | 'scare';
 
 export type VanishPhase = 'present' | 'vanishing' | 'gone' | 'returning';
 
@@ -226,4 +244,11 @@ export interface EngineStatus {
   faces: number;
   error?: string;
   loading?: boolean;
+  /** Microphone snap detection: off, waiting for audio, or listening. */
+  listening?: 'off' | 'starting' | 'on' | 'blocked';
+  /** Date.now() of the last finger snap heard. */
+  heardSnapAt?: number;
+  /** Hands in view and the magic gesture each one is making. */
+  hands?: number;
+  gestures?: string[];
 }

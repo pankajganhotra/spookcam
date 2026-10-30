@@ -5,7 +5,10 @@ import { bindTarget, createProgram, createTarget, createTexture, deleteTarget, u
 import * as S from './shaders';
 import * as F from './face-shaders';
 import { FILTERS } from './face-shaders';
-import { buildHalo, faceFrame, propsFor, type Prop } from './characters';
+import { buildHalo, faceFrame, PROP, propsFor, type Prop } from './characters';
+import * as M from './magic-shaders';
+import type { HallucinationState } from './hallucinations';
+import type { MagicFrame } from './magic';
 
 const FILTER_IDS: Record<Settings['face'], number> = { none: 0, ...FILTERS };
 const BACKDROP_IDS: Record<Settings['backdrop'], number> = { none: 0, graveyard: 1, bloodmoon: 2, void: 3 };
@@ -33,6 +36,10 @@ export interface RenderInput {
   time: number;
   /** Freeze this frame's person layer as the particle color source. */
   snapshot?: boolean;
+  hall?: HallucinationState;
+  magic?: MagicFrame;
+  /** Talon strips (x, y uv, t, s) to draw on the person layer. */
+  claws?: Float32Array[];
 }
 
 export class Renderer {
@@ -42,7 +49,7 @@ export class Renderer {
   private width = 0;
   private height = 0;
 
-  private p!: Record<'copy' | 'mask' | 'plate' | 'coverage' | 'face' | 'eye' | 'mouth' | 'halo' | 'acc' | 'composite' | 'particle' | 'post', Program>;
+  private p!: Record<'copy' | 'mask' | 'plate' | 'coverage' | 'face' | 'eye' | 'mouth' | 'halo' | 'acc' | 'echo' | 'sprite' | 'flame' | 'light' | 'composite' | 'particle' | 'post', Program>;
   private camTex!: WebGLTexture;
   private rawMaskTex!: WebGLTexture;
   private maskSize = [0, 0];
@@ -61,6 +68,12 @@ export class Renderer {
   private haloVao!: WebGLVertexArrayObject;
   private haloBuf!: WebGLBuffer;
   private haloData = new Float32Array(80 * 5);
+  private spriteVao!: WebGLVertexArrayObject;
+  private spriteBuf!: WebGLBuffer;
+  private flameVao!: WebGLVertexArrayObject;
+  private flameBuf!: WebGLBuffer;
+  private echo?: Target;
+  private echoFrame = 0;
   private emptyVao!: WebGLVertexArrayObject;
   private coverageTarget!: Target;
   private coveragePx = new Uint8Array(64 * 48 * 4);
@@ -114,6 +127,10 @@ export class Renderer {
       mouth: createProgram(gl, F.FEATURE_VS, F.MOUTH_FS, 'mouth'),
       halo: createProgram(gl, F.HALO_VS, F.HALO_FS, 'halo'),
       acc: createProgram(gl, F.ACC_VS, F.ACC_FS, 'acc'),
+      echo: createProgram(gl, q, S.ECHO_FS, 'echo'),
+      sprite: createProgram(gl, M.SPRITE_VS, M.SPRITE_FS, 'sprite'),
+      flame: createProgram(gl, M.FLAME_VS, M.FLAME_FS, 'flame'),
+      light: createProgram(gl, q, M.LIGHT_FS, 'light'),
       composite: createProgram(gl, q, S.COMPOSITE_FS, 'composite'),
       particle: createProgram(gl, S.PARTICLE_VS, S.PARTICLE_FS, 'particle'),
       post: createProgram(gl, q, S.POST_FS, 'post'),
@@ -184,6 +201,26 @@ export class Renderer {
     gl.enableVertexAttribArray(attr(this.p.halo, 'aDir'));
     gl.vertexAttribPointer(attr(this.p.halo, 'aDir'), 2, gl.FLOAT, false, 20, 12);
 
+    this.spriteVao = gl.createVertexArray()!;
+    gl.bindVertexArray(this.spriteVao);
+    this.spriteBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, 1400 * 28, gl.DYNAMIC_DRAW);
+    for (const [name, size, offset] of [['aPos', 2, 0], ['aSize', 1, 8], ['aColor', 4, 12]] as const) {
+      gl.enableVertexAttribArray(attr(this.p.sprite, name));
+      gl.vertexAttribPointer(attr(this.p.sprite, name), size, gl.FLOAT, false, 28, offset);
+    }
+
+    this.flameVao = gl.createVertexArray()!;
+    gl.bindVertexArray(this.flameVao);
+    this.flameBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.flameBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, 4 * 16, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(attr(this.p.flame, 'aPos'));
+    gl.vertexAttribPointer(attr(this.p.flame, 'aPos'), 2, gl.FLOAT, false, 16, 0);
+    gl.enableVertexAttribArray(attr(this.p.flame, 'aLocal'));
+    gl.vertexAttribPointer(attr(this.p.flame, 'aLocal'), 2, gl.FLOAT, false, 16, 8);
+
     this.emptyVao = gl.createVertexArray()!;
     gl.bindVertexArray(null);
     this.coverageTarget = createTarget(gl, 64, 48);
@@ -196,7 +233,8 @@ export class Renderer {
     this.height = h;
     this.canvas.width = w;
     this.canvas.height = h;
-    for (const t of [...this.plate, this.person, this.comp, this.snapPerson]) deleteTarget(gl, t);
+    for (const t of [...this.plate, this.person, this.comp, this.snapPerson, this.echo]) deleteTarget(gl, t);
+    this.echo = createTarget(gl, w, h);
     this.plate = [createTarget(gl, w, h, true), createTarget(gl, w, h, true)];
     this.person = createTarget(gl, w, h);
     this.comp = createTarget(gl, w, h);
@@ -328,11 +366,26 @@ export class Renderer {
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       for (let i = 0; i < input.faces.length; i++) this.drawFace(input.faces[i], filter, s.faceIntensity, input.time, res, i);
     }
+    const light = this.lightUniforms(input.faces[0], res, input.time);
+    if (input.claws?.length) {
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      this.drawProps(input.claws.map((data) => ({ kind: PROP.claw, color: [0, 0, 0], mode: 'strip', data, count: data.length / 4, layer: 'front' })), 'front', light);
+    }
     if (input.snapshot) this.snapshot();
+
+    // Echo hallucination: refresh the afterimage every few frames so it lags and strobes.
+    const hall = input.hall;
+    if (hall && hall.echo > 0 && this.hasMask && this.echoFrame++ % 7 === 0) {
+      gl.disable(gl.BLEND);
+      bindTarget(gl, this.echo!);
+      use(gl, this.p.echo, { uPerson: { tex: this.person!.tex, unit: 0 }, uMask: { tex: this.mask[0]!.tex, unit: 1 } });
+      this.quad();
+    }
 
     // 2. Composite person over backdrop / learned plate, apply the vanish front.
     const vanishing = vanish.t > 0;
-    const needFill = (vanishing || s.ghost) && s.backdrop === 'none';
+    const needFill = (vanishing || s.ghost || !!hall?.active) && s.backdrop === 'none';
     gl.disable(gl.BLEND);
     bindTarget(gl, this.comp!);
     const wind = WIND[s.wind];
@@ -352,6 +405,7 @@ export class Renderer {
       uMaskTexel: [1 / Math.max(1, this.maskSize[0]), 1 / Math.max(1, this.maskSize[1])],
       uWind: wind,
       uAspect: w / h,
+      ...this.hallucinationUniforms(hall, input.faces[0], res),
     });
     gl.uniform1i(this.p.composite.uniforms.get('uBackdrop')!, BACKDROP_IDS[s.backdrop]);
     gl.uniform1i(this.p.composite.uniforms.get('uStyle')!, style);
@@ -381,6 +435,8 @@ export class Renderer {
       gl.disable(gl.BLEND);
     }
 
+    if (input.magic) this.drawMagic(input.magic, res, input.time, light);
+
     // 4. Atmosphere grade straight to the canvas.
     bindTarget(gl, null, w, h);
     use(gl, this.p.post, {
@@ -393,9 +449,84 @@ export class Renderer {
       uFog: s.fog,
       uAspect: w / h,
       uRes: res,
+      uFlash: hall?.flash ?? 0,
     });
     gl.uniform1i(this.p.post.uniforms.get('uTint')!, TINT_IDS[s.tint]);
     this.quad();
+  }
+
+  /** Camera + skin-reference uniforms shared by the lit face/prop programs. */
+  private lightUniforms(lm: Float32Array | undefined, res: [number, number], time: number) {
+    const skin = new Float32Array(SKIN_POINTS.length * 2).fill(0.5);
+    if (lm) SKIN_POINTS.forEach((i, k) => skin.set([lm[i * 2], lm[i * 2 + 1]], k * 2));
+    return { uCam: { tex: this.camTex, unit: 0 }, uSkin: skin, uTexel: [1 / res[0], 1 / res[1]], uTime: time, uIntensity: 1 };
+  }
+
+  private hallucinationUniforms(hall: HallucinationState | undefined, lm: Float32Array | undefined, res: [number, number]) {
+    const off = { uWarp: false, uJaw: 0, uBulge: 0, uMelt: 0, uEcho: 0, uJerk: [0, 0], uFigure: [0, 0, 1], uRes: res, uEchoTex: { tex: this.echo!.tex, unit: 3 } };
+    if (!hall || (!hall.active && !hall.flash)) return off;
+    const out = { ...off, uWarp: true, uJerk: hall.jerk, uEcho: hall.echo, uFigure: hall.figure };
+    const f = lm && faceFrame(lm, res);
+    if (!f || !lm) return out;
+    const P = (i: number) => [lm[i * 2], lm[i * 2 + 1]];
+    return {
+      ...out,
+      uJaw: hall.jaw,
+      uBulge: hall.eyes,
+      uMelt: hall.melt,
+      uMouth: [(lm[26] + lm[28]) / 2, (lm[27] + lm[29]) / 2], // between landmarks 13 and 14
+      uEyeL: P(468),
+      uEyeR: P(473),
+      uFaceC: P(1),
+      uDown: [-f.up[0], -f.up[1]],
+      uFaceS: f.faceH,
+    };
+  }
+
+  private drawMagic(m: MagicFrame, res: [number, number], time: number, light: ReturnType<Renderer['lightUniforms']>) {
+    const gl = this.gl;
+    const [W, H] = res;
+    gl.enable(gl.BLEND);
+    // Flames light up the room: dst * (1 + light).
+    if (m.lights.length) {
+      gl.blendFunc(gl.DST_COLOR, gl.ONE);
+      use(gl, this.p.light, { uRes: res });
+      gl.uniform4fv(this.p.light.uniforms.get('uLights')!, Float32Array.from(m.lights.flatMap((l) => [l.x / W, l.y / H, l.radius, l.intensity])).slice(0, 16));
+      gl.uniform1i(this.p.light.uniforms.get('uCount')!, m.lights.length);
+      this.quad();
+    }
+    const sprites = (data: Float32Array, count: number, smoke: boolean) => {
+      if (!count) return;
+      gl.bindVertexArray(this.spriteVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, count * 7);
+      use(gl, this.p.sprite, { uSmoke: smoke ? 1 : 0 });
+      gl.drawArrays(gl.POINTS, 0, count);
+    };
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    sprites(m.smoke, m.smokeCount, true);
+    this.drawProps(m.candles.map((data) => ({ kind: PROP.candle, color: [0, 0, 0], mode: 'strip', data, count: 4, layer: 'front' })), 'front', light);
+    gl.blendFunc(gl.ONE, gl.ONE);
+    for (const f of m.flames) {
+      // Candle flames sit above their point; fireballs are centred on it.
+      const hw = f.kind === 0 ? f.size * 0.45 : f.size;
+      const y0 = f.kind === 0 ? f.y + f.size * 0.08 : f.y + f.size;
+      const y1 = f.kind === 0 ? f.y - f.size * 1.3 : f.y - f.size;
+      const quad = new Float32Array([
+        (f.x - hw) / W, y0 / H, -1, 0,
+        (f.x + hw) / W, y0 / H, 1, 0,
+        (f.x - hw) / W, y1 / H, -1, 1,
+        (f.x + hw) / W, y1 / H, 1, 1,
+      ]);
+      gl.bindVertexArray(this.flameVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.flameBuf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, quad);
+      use(gl, this.p.flame, { uTime: time, uSeed: f.seed });
+      gl.uniform1i(this.p.flame.uniforms.get('uKind')!, f.kind);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+    sprites(m.fire, m.fireCount, false);
+    gl.disable(gl.BLEND);
   }
 
   private drawFace(lm: Float32Array, filter: number, intensity: number, time: number, res: [number, number], faceIndex: number) {
