@@ -153,8 +153,11 @@ export async function mountControls(opts: ControlsOptions) {
     );
   }
 
-  const faceGrid = h('div', { class: 'tiles' });
-  for (const f of FACE_FILTERS) faceGrid.append(tile(f.emoji, f.name, () => settings.face === f.id, () => update({ face: f.id }), f.blurb));
+  const faceGrid = (group: 'character' | 'paint') => {
+    const grid = h('div', { class: 'tiles' });
+    for (const f of FACE_FILTERS) if (f.group === group) grid.append(tile(f.emoji, f.name, () => settings.face === f.id, () => update({ face: f.id }), f.blurb));
+    return grid;
+  };
 
   const backdropGrid = h('div', { class: 'tiles' });
   for (const b of BACKDROPS) backdropGrid.append(tile(b.emoji, b.name, () => settings.backdrop === b.id, () => update({ backdrop: b.id })));
@@ -162,10 +165,11 @@ export async function mountControls(opts: ControlsOptions) {
   opts.root.append(
     snapZone,
     section('Presets', null, presetRow),
+    section('Characters', toggle('Everyone', () => settings.multiFace, (multiFace) => update({ multiFace })), faceGrid('character')),
     section(
-      'Face',
-      toggle('Everyone', () => settings.multiFace, (multiFace) => update({ multiFace })),
-      faceGrid,
+      'Face paint',
+      null,
+      faceGrid('paint'),
       h('div', { style: 'margin-top:10px' }, slider('Strength', () => settings.faceIntensity, (faceIntensity) => update({ faceIntensity }, true))),
     ),
     section(

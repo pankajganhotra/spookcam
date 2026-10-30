@@ -134,7 +134,7 @@ try {
   if (st?.faces) check(true, `engine live: ${st.fps} fps, ${st.faces} face(s)`);
   await wait(800);
 
-  const faces = ['skull', 'zombie', 'demon', 'vampire', 'possessed', 'wraith', 'pumpkin'];
+  const faces = ['skull', 'zombie', 'demon', 'vampire', 'possessed', 'wraith', 'pumpkin', 'clown', 'slasher', 'burned', 'monster', 'werewolf', 'mummy', 'witch', 'doll', 'onryo'];
   for (const face of faces) {
     await setSettings({ face });
     await wait(700);

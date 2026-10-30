@@ -1,12 +1,23 @@
 export const FACE_FILTERS = [
-  { id: 'none', name: 'None', emoji: '🚫', blurb: 'No face paint' },
-  { id: 'skull', name: 'Skull', emoji: '💀', blurb: 'Bone-white skull with hollow sockets' },
-  { id: 'zombie', name: 'Zombie', emoji: '🧟', blurb: 'Rotting skin, veins and milky eyes' },
-  { id: 'demon', name: 'Demon', emoji: '😈', blurb: 'Molten cracks, horns, burning eyes' },
-  { id: 'vampire', name: 'Vampire', emoji: '🧛', blurb: 'Deathly pale, red eyes, fangs, blood' },
-  { id: 'possessed', name: 'Possessed', emoji: '👁️', blurb: 'Black eyes, crawling veins, black tears' },
-  { id: 'wraith', name: 'Wraith', emoji: '👻', blurb: 'Stretched white mask, screaming void' },
-  { id: 'pumpkin', name: 'Jack-o’-lantern', emoji: '🎃', blurb: 'Carved pumpkin with candle glow' },
+  { id: 'none', name: 'None', emoji: '🚫', group: 'paint', blurb: 'No face paint' },
+  // Classic horror characters
+  { id: 'clown', name: 'Killer clown', emoji: '🤡', group: 'character', blurb: 'Cracked greasepaint, red nose, needle teeth' },
+  { id: 'slasher', name: 'Camp slasher', emoji: '🏒', group: 'character', blurb: 'Battered hockey mask with red chevrons' },
+  { id: 'burned', name: 'Nightmare', emoji: '🔥', group: 'character', blurb: 'Melted, burn-scarred skin' },
+  { id: 'monster', name: 'Frankenstein', emoji: '🧟‍♂️', group: 'character', blurb: 'Stitched green skin, flat-top, neck bolts' },
+  { id: 'werewolf', name: 'Werewolf', emoji: '🐺', group: 'character', blurb: 'Fur, mane, ears, amber eyes and fangs' },
+  { id: 'mummy', name: 'Mummy', emoji: '🩹', group: 'character', blurb: 'Stained linen wrapped around your head' },
+  { id: 'witch', name: 'Witch', emoji: '🧙', group: 'character', blurb: 'Green warty skin, cat eyes, tall hat' },
+  { id: 'doll', name: 'Haunted doll', emoji: '🪆', group: 'character', blurb: 'Cracked porcelain and glass eyes' },
+  { id: 'onryo', name: 'Onryō', emoji: '🎎', group: 'character', blurb: 'Pale cursed ghost behind long black hair' },
+  { id: 'vampire', name: 'Vampire', emoji: '🧛', group: 'character', blurb: 'Deathly pale, red eyes, fangs, blood' },
+  // Face paints
+  { id: 'skull', name: 'Skull', emoji: '💀', group: 'paint', blurb: 'Bone-white skull with hollow sockets' },
+  { id: 'zombie', name: 'Zombie', emoji: '🧟', group: 'paint', blurb: 'Rotting skin, veins and milky eyes' },
+  { id: 'demon', name: 'Demon', emoji: '😈', group: 'paint', blurb: 'Molten cracks, horns, burning eyes' },
+  { id: 'possessed', name: 'Possessed', emoji: '👁️', group: 'paint', blurb: 'Black eyes, crawling veins, black tears' },
+  { id: 'wraith', name: 'Wraith', emoji: '👻', group: 'paint', blurb: 'Stretched white mask, screaming void' },
+  { id: 'pumpkin', name: 'Jack-o’-lantern', emoji: '🎃', group: 'paint', blurb: 'Carved pumpkin with candle glow' },
 ] as const;
 export type FaceFilterId = (typeof FACE_FILTERS)[number]['id'];
 
@@ -23,6 +34,7 @@ export const TINTS = [
   { id: 'blood', name: 'Blood' },
   { id: 'sickly', name: 'Sickly' },
   { id: 'noir', name: 'Noir' },
+  { id: 'sepia', name: 'Old film' },
   { id: 'nightvision', name: 'Night vision' },
 ] as const;
 export type TintId = (typeof TINTS)[number]['id'];
@@ -126,6 +138,54 @@ export const PRESETS: Preset[] = [
     name: 'Apparition',
     emoji: '👻',
     patch: { face: 'wraith', backdrop: 'none', ghost: true, tint: 'noir', vignette: 0.7, grain: 0.4, flicker: 0.35, glitch: 0.15, fog: 0.4 },
+  },
+  {
+    id: 'circus',
+    name: 'Circus',
+    emoji: '🎪',
+    patch: { face: 'clown', backdrop: 'none', ghost: false, tint: 'none', vignette: 0.7, grain: 0.3, flicker: 0.45, glitch: 0.2, fog: 0 },
+  },
+  {
+    id: 'camp',
+    name: 'Camp Blood',
+    emoji: '🏕️',
+    patch: { face: 'slasher', backdrop: 'graveyard', ghost: false, tint: 'none', vignette: 0.65, grain: 0.3, flicker: 0, glitch: 0, fog: 0.6 },
+  },
+  {
+    id: 'fullmoon',
+    name: 'Full moon',
+    emoji: '🌕',
+    patch: { face: 'werewolf', backdrop: 'graveyard', ghost: false, tint: 'none', vignette: 0.55, grain: 0.2, flicker: 0, glitch: 0, fog: 0.45 },
+  },
+  {
+    id: 'tomb',
+    name: 'The tomb',
+    emoji: '⚱️',
+    patch: { face: 'mummy', backdrop: 'none', ghost: false, tint: 'sepia', vignette: 0.75, grain: 0.55, flicker: 0.3, glitch: 0, fog: 0.2 },
+  },
+  {
+    id: 'lab',
+    name: 'The lab',
+    emoji: '⚡',
+    patch: { face: 'monster', backdrop: 'none', ghost: false, tint: 'noir', vignette: 0.7, grain: 0.45, flicker: 0.6, glitch: 0, fog: 0 },
+  },
+  {
+    id: 'curse',
+    name: 'The curse',
+    emoji: '📼',
+    patch: { face: 'onryo', backdrop: 'none', ghost: false, tint: 'sickly', vignette: 0.6, grain: 0.5, flicker: 0.2, glitch: 0.55, fog: 0 },
+  },
+  {
+    id: 'coven',
+    name: 'Coven',
+    emoji: '🧹',
+    patch: { face: 'witch', backdrop: 'bloodmoon', ghost: false, tint: 'none', vignette: 0.55, grain: 0.2, flicker: 0, glitch: 0, fog: 0.4 },
+  },
+  {
+    id: 'dollhouse',
+    name: 'Dollhouse',
+    emoji: '🏚️',
+    patch: { face: 'doll', backdrop: 'none', ghost: false, tint: 'sepia', vignette: 0.7, grain: 0.35, flicker: 0.25, glitch: 0, fog: 0 },
   },
   {
     id: 'pumpkin',

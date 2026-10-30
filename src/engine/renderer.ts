@@ -3,14 +3,18 @@ import type { SegmentationMask } from './detectors';
 import { FACE_FEATHER, FACE_OVAL, FACE_SKIRT, FACE_TOTAL_VERTICES, FACE_TRIANGLES, FACE_UVS, FACE_VERTEX_COUNT, LEFT_EYE, LEFT_IRIS, MOUTH_INNER, RIGHT_EYE, RIGHT_IRIS } from './facemesh-data';
 import { bindTarget, createProgram, createTarget, createTexture, deleteTarget, use, type GL, type Program, type Target } from './gl';
 import * as S from './shaders';
+import * as F from './face-shaders';
+import { FILTERS } from './face-shaders';
+import { buildHalo, faceFrame, propsFor, type Prop } from './characters';
 
-const FILTER_IDS: Record<Settings['face'], number> = { none: 0, skull: 1, zombie: 2, demon: 3, vampire: 4, possessed: 5, wraith: 6, pumpkin: 7 };
+const FILTER_IDS: Record<Settings['face'], number> = { none: 0, ...FILTERS };
 const BACKDROP_IDS: Record<Settings['backdrop'], number> = { none: 0, graveyard: 1, bloodmoon: 2, void: 3 };
-const TINT_IDS: Record<Settings['tint'], number> = { none: 0, blood: 1, sickly: 2, noir: 3, nightvision: 4 };
+const TINT_IDS: Record<Settings['tint'], number> = { none: 0, blood: 1, sickly: 2, noir: 3, nightvision: 4, sepia: 5 };
 const STYLE_IDS: Record<Settings['vanishStyle'], number> = { dust: 0, embers: 1, cloak: 2 };
 const WIND: Record<Settings['wind'], [number, number]> = { right: [0.94, -0.34], left: [-0.94, -0.34], up: [0.15, -0.99] };
 
-const HORN_SEGMENTS = 20;
+/** Landmarks sampled to measure how bright skin currently is: cheeks, forehead, nose bridge, chin. */
+const SKIN_POINTS = [50, 280, 151, 6, 199];
 
 export interface VanishState {
   /** Seconds into the vanish timeline (0 = fully present). */
@@ -38,7 +42,7 @@ export class Renderer {
   private width = 0;
   private height = 0;
 
-  private p!: Record<'copy' | 'mask' | 'plate' | 'coverage' | 'face' | 'eye' | 'mouth' | 'horn' | 'composite' | 'particle' | 'post', Program>;
+  private p!: Record<'copy' | 'mask' | 'plate' | 'coverage' | 'face' | 'eye' | 'mouth' | 'halo' | 'acc' | 'composite' | 'particle' | 'post', Program>;
   private camTex!: WebGLTexture;
   private rawMaskTex!: WebGLTexture;
   private maskSize = [0, 0];
@@ -52,8 +56,11 @@ export class Renderer {
   private facePosBuf!: WebGLBuffer;
   private featVao!: WebGLVertexArrayObject;
   private featBuf!: WebGLBuffer;
-  private hornVao!: WebGLVertexArrayObject;
-  private hornBuf!: WebGLBuffer;
+  private accVao!: WebGLVertexArrayObject;
+  private accBuf!: WebGLBuffer;
+  private haloVao!: WebGLVertexArrayObject;
+  private haloBuf!: WebGLBuffer;
+  private haloData = new Float32Array(80 * 5);
   private emptyVao!: WebGLVertexArrayObject;
   private coverageTarget!: Target;
   private coveragePx = new Uint8Array(64 * 48 * 4);
@@ -102,10 +109,11 @@ export class Renderer {
       mask: createProgram(gl, q, S.MASK_FS, 'mask'),
       plate: createProgram(gl, q, S.PLATE_FS, 'plate'),
       coverage: createProgram(gl, q, S.COVERAGE_FS, 'coverage'),
-      face: createProgram(gl, S.FACE_VS, S.FACE_FS, 'face'),
-      eye: createProgram(gl, S.FEATURE_VS, S.EYE_FS, 'eye'),
-      mouth: createProgram(gl, S.FEATURE_VS, S.MOUTH_FS, 'mouth'),
-      horn: createProgram(gl, S.HORN_VS, S.HORN_FS, 'horn'),
+      face: createProgram(gl, F.FACE_VS, F.FACE_FS, 'face'),
+      eye: createProgram(gl, F.FEATURE_VS, F.EYE_FS, 'eye'),
+      mouth: createProgram(gl, F.FEATURE_VS, F.MOUTH_FS, 'mouth'),
+      halo: createProgram(gl, F.HALO_VS, F.HALO_FS, 'halo'),
+      acc: createProgram(gl, F.ACC_VS, F.ACC_FS, 'acc'),
       composite: createProgram(gl, q, S.COMPOSITE_FS, 'composite'),
       particle: createProgram(gl, S.PARTICLE_VS, S.PARTICLE_FS, 'particle'),
       post: createProgram(gl, q, S.POST_FS, 'post'),
@@ -154,15 +162,27 @@ export class Renderer {
       gl.vertexAttribPointer(attr(prog, 'aEdge'), 1, gl.FLOAT, false, 12, 8);
     }
 
-    this.hornVao = gl.createVertexArray()!;
-    gl.bindVertexArray(this.hornVao);
-    this.hornBuf = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.hornBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, (HORN_SEGMENTS + 1) * 2 * 16, gl.DYNAMIC_DRAW);
-    gl.enableVertexAttribArray(attr(this.p.horn, 'aPos'));
-    gl.vertexAttribPointer(attr(this.p.horn, 'aPos'), 2, gl.FLOAT, false, 16, 0);
-    gl.enableVertexAttribArray(attr(this.p.horn, 'aHorn'));
-    gl.vertexAttribPointer(attr(this.p.horn, 'aHorn'), 2, gl.FLOAT, false, 16, 8);
+    this.accVao = gl.createVertexArray()!;
+    gl.bindVertexArray(this.accVao);
+    this.accBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.accBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, 256 * 16, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(attr(this.p.acc, 'aPos'));
+    gl.vertexAttribPointer(attr(this.p.acc, 'aPos'), 2, gl.FLOAT, false, 16, 0);
+    gl.enableVertexAttribArray(attr(this.p.acc, 'aLocal'));
+    gl.vertexAttribPointer(attr(this.p.acc, 'aLocal'), 2, gl.FLOAT, false, 16, 8);
+
+    this.haloVao = gl.createVertexArray()!;
+    gl.bindVertexArray(this.haloVao);
+    this.haloBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.haloBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, this.haloData.byteLength, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(attr(this.p.halo, 'aPos'));
+    gl.vertexAttribPointer(attr(this.p.halo, 'aPos'), 2, gl.FLOAT, false, 20, 0);
+    gl.enableVertexAttribArray(attr(this.p.halo, 'aRad'));
+    gl.vertexAttribPointer(attr(this.p.halo, 'aRad'), 1, gl.FLOAT, false, 20, 8);
+    gl.enableVertexAttribArray(attr(this.p.halo, 'aDir'));
+    gl.vertexAttribPointer(attr(this.p.halo, 'aDir'), 2, gl.FLOAT, false, 20, 12);
 
     this.emptyVao = gl.createVertexArray()!;
     gl.bindVertexArray(null);
@@ -380,17 +400,36 @@ export class Renderer {
 
   private drawFace(lm: Float32Array, filter: number, intensity: number, time: number, res: [number, number], faceIndex: number) {
     const gl = this.gl;
-    const seed = faceIndex * 13.7;
+    const frame = faceFrame(lm, res);
+    if (!frame) return;
+    const skin = new Float32Array(SKIN_POINTS.length * 2);
+    SKIN_POINTS.forEach((i, k) => skin.set([lm[i * 2], lm[i * 2 + 1]], k * 2));
+    // Shared by every face program: camera texture + skin brightness reference.
+    const light = { uCam: { tex: this.camTex, unit: 0 }, uSkin: skin, uTexel: [1 / res[0], 1 / res[1]], uTime: time, uIntensity: intensity };
+    const props = propsFor(filter, frame);
+
+    this.drawProps(props, 'back', light);
 
     gl.bindVertexArray(this.faceVao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.facePosBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.meshPositions(lm));
-    use(gl, this.p.face, { uCam: { tex: this.camTex, unit: 0 }, uTime: time, uIntensity: intensity, uSeed: seed });
+    use(gl, this.p.face, { ...light, uSeed: faceIndex * 13.7 });
     gl.uniform1i(this.p.face.uniforms.get('uFilter')!, filter);
     gl.drawElements(gl.TRIANGLES, FACE_TRIANGLES.length, gl.UNSIGNED_SHORT, 0);
 
+    // Hair, fur and wraps go over the paint's soft skirt so the hairline reads as real.
+    const haloCount = buildHalo(filter, frame, this.haloData);
+    if (haloCount) {
+      gl.bindVertexArray(this.haloVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.haloBuf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.haloData, 0, haloCount * 5);
+      use(gl, this.p.halo, light);
+      gl.uniform1i(this.p.halo.uniforms.get('uFilter')!, filter);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, haloCount);
+    }
+
     // Eyes.
-    const P = (i: number) => [lm[i * 2], lm[i * 2 + 1]] as const;
+    const P = (i: number) => [lm[i * 2], lm[i * 2 + 1]];
     const px = (i: number) => [lm[i * 2] * res[0], lm[i * 2 + 1] * res[1]] as const;
     const dist = (a: number, b: number) => Math.hypot(px(a)[0] - px(b)[0], px(a)[1] - px(b)[1]);
     const hasIris = lm.length >= 478 * 2;
@@ -398,14 +437,7 @@ export class Renderer {
       const n = this.fillFan(contour, lm);
       const center = hasIris ? P(iris) : this.centroid(contour, lm);
       const irisR = hasIris ? (dist(iris + 1, iris + 3) + dist(iris + 2, iris + 4)) / 4 : dist(contour[0], contour[8]) * 0.22;
-      use(gl, this.p.eye, {
-        uCam: { tex: this.camTex, unit: 0 },
-        uIris: center as unknown as number[],
-        uIrisR: irisR,
-        uRes: res,
-        uTime: time,
-        uIntensity: intensity,
-      });
+      use(gl, this.p.eye, { ...light, uIris: center, uIrisR: irisR, uRes: res });
       gl.uniform1i(this.p.eye.uniforms.get('uFilter')!, filter);
       gl.bindVertexArray(this.featVao);
       gl.drawArrays(gl.TRIANGLE_FAN, 0, n);
@@ -414,22 +446,26 @@ export class Renderer {
     // Inner mouth (only matters once the lips part).
     if (dist(13, 14) > 1.5) {
       const n = this.fillFan(MOUTH_INNER, lm);
-      use(gl, this.p.mouth, {
-        uCam: { tex: this.camTex, unit: 0 },
-        uRes: res,
-        uMouthL: P(78) as unknown as number[],
-        uMouthR: P(308) as unknown as number[],
-        uMouthTop: P(13) as unknown as number[],
-        uMouthBot: P(14) as unknown as number[],
-        uTime: time,
-        uIntensity: intensity,
-      });
+      use(gl, this.p.mouth, { ...light, uRes: res, uMouthL: P(78), uMouthR: P(308), uMouthTop: P(13), uMouthBot: P(14) });
       gl.uniform1i(this.p.mouth.uniforms.get('uFilter')!, filter);
       gl.bindVertexArray(this.featVao);
       gl.drawArrays(gl.TRIANGLE_FAN, 0, n);
     }
 
-    if (filter === FILTER_IDS.demon) this.drawHorns(lm, res, time, intensity);
+    this.drawProps(props, 'front', light);
+  }
+
+  private drawProps(props: Prop[], layer: Prop['layer'], light: Parameters<typeof use>[2]) {
+    const gl = this.gl;
+    for (const p of props) {
+      if (p.layer !== layer) continue;
+      gl.bindVertexArray(this.accVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.accBuf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, p.data);
+      use(gl, this.p.acc, { ...light, uColor: p.color });
+      gl.uniform1i(this.p.acc.uniforms.get('uKind')!, p.kind);
+      gl.drawArrays(p.mode === 'fan' ? gl.TRIANGLE_FAN : gl.TRIANGLE_STRIP, 0, p.count);
+    }
   }
 
   private meshPos = new Float32Array(FACE_TOTAL_VERTICES * 2);
@@ -474,55 +510,6 @@ export class Renderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.featBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, f, 0, k);
     return k / 3;
-  }
-
-  private hornData = new Float32Array((HORN_SEGMENTS + 1) * 2 * 4);
-
-  private drawHorns(lm: Float32Array, res: [number, number], time: number, intensity: number) {
-    const gl = this.gl;
-    const [W, H] = res;
-    const px = (i: number) => [lm[i * 2] * W, lm[i * 2 + 1] * H];
-    const top = px(10), chin = px(152);
-    let ux = top[0] - chin[0], uy = top[1] - chin[1];
-    const faceH = Math.hypot(ux, uy);
-    if (faceH < 20) return;
-    ux /= faceH; uy /= faceH;
-    // "right" in image space, perpendicular to up.
-    const rx = -uy, ry = ux;
-    const mid = px(168);
-    use(gl, this.p.horn, { uTime: time, uIntensity: intensity });
-    gl.bindVertexArray(this.hornVao);
-    for (const anchor of [67, 297]) {
-      const a = px(anchor);
-      const out = Math.sign((a[0] - mid[0]) * rx + (a[1] - mid[1]) * ry) || (anchor === 67 ? -1 : 1);
-      const bx = a[0] + ux * faceH * 0.02, by = a[1] + uy * faceH * 0.02;
-      const d = this.hornData;
-      let k = 0;
-      for (let i = 0; i <= HORN_SEGMENTS; i++) {
-        const t = i / HORN_SEGMENTS;
-        // Rise up and outward, then hook back inward at the tip.
-        const o = (0.16 * t + 0.1 * Math.sin(t * Math.PI * 0.9) - 0.12 * t * t * t) * faceH * out;
-        const u = (0.42 * t - 0.06 * t * t) * faceH;
-        const cx = bx + rx * o + ux * u, cy = by + ry * o + uy * u;
-        // Tangent for the strip normal.
-        const t2 = Math.min(1, t + 0.01);
-        const o2 = (0.16 * t2 + 0.1 * Math.sin(t2 * Math.PI * 0.9) - 0.12 * t2 * t2 * t2) * faceH * out;
-        const u2 = (0.42 * t2 - 0.06 * t2 * t2) * faceH;
-        let tx = bx + rx * o2 + ux * u2 - cx, ty = by + ry * o2 + uy * u2 - cy;
-        const tl = Math.hypot(tx, ty) || 1;
-        tx /= tl; ty /= tl;
-        const halfW = 0.065 * faceH * Math.pow(1 - t, 0.85) + 0.5;
-        for (const s of [-1, 1]) {
-          d[k++] = (cx - ty * halfW * s) / W;
-          d[k++] = (cy + tx * halfW * s) / H;
-          d[k++] = t;
-          d[k++] = s;
-        }
-      }
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.hornBuf);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, d);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, (HORN_SEGMENTS + 1) * 2);
-    }
   }
 
   dispose() {

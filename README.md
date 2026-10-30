@@ -3,14 +3,19 @@
 A Chrome extension (Manifest V3) that turns your webcam into a horror show in **any** site that
 uses the camera — Google Meet, Zoom (web), Teams, Discord, Whereby, or your own page.
 
-- **Face filters** that track your face in real time: Skull, Zombie, Demon (with horns), Vampire
-  (fangs and blood), Possessed (black eyes, black tears), Wraith, and Jack-o'-lantern.
+- **Classic horror characters** that track your face in real time: Killer clown (red nose,
+  needle teeth, frizzy hair), Camp slasher (hockey mask), Nightmare (burn scars), Frankenstein
+  (stitches, flat-top, neck bolts), Werewolf (fur, mane, ears, fangs), Mummy, Witch (warts, cat
+  eyes, hat), Haunted doll (cracked porcelain, glass eyes), Onryō (long black hair) and Vampire.
+- **Face paints**: Skull, Zombie, Demon (with horns), Possessed, Wraith and Jack-o'-lantern.
+- **Lit like your room**: every material is shaded by your camera's own lighting (relative to
+  your average skin brightness) and keeps your real pores and wrinkles, so it holds up in dim rooms.
 - **Thanos snap**: you disintegrate into drifting dust and the room behind you shows through.
   Snap again and the dust flies back together. Two more styles: *burn to embers* and an
   *invisibility cloak* with a refraction shimmer.
 - **Haunted backdrops**: graveyard, blood moon, or the void (with blinking eyes), plus a
   see-through **ghost body** mode.
-- **Atmosphere**: blood / sickly / noir / night-vision grades, creeping fog, vignette, film grain,
+- **Atmosphere**: blood / sickly / noir / old-film / night-vision grades, creeping fog, vignette, film grain,
   failing-bulb flicker, VHS glitch.
 - **Presets** for one-click looks, a **preview studio** with photo and clip recording, and a
   keyboard shortcut: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> snaps from any tab.
