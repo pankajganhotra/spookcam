@@ -1,0 +1,8 @@
+node_modules/
+dist/
+public/models/
+scripts/data/
+test/fixtures/
+test/out/
+*.y4m
+.DS_Store
