@@ -5,6 +5,8 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Manual run: build and keep the zip as a workflow artifact, without touching any release.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -22,14 +24,21 @@ jobs:
         run: npm ci
         env:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
-      - run: npm run typecheck
+      # Package first: the build generates src/engine/vendor/mediapipe-loader.js, which typecheck needs.
       - name: Package
         run: npm run package
+      - run: npm run typecheck
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spookcam-extension
+          path: release/*.zip
       - name: Check tag matches version
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           v=$(node -p "require('./manifest.json').version")
           test "v$v" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != manifest v$v"; exit 1; }
       - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
